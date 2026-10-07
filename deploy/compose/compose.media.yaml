@@ -1,0 +1,7 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: rtsp-console-mediamtx
+    ports:
+      - "8554:8554"
+    restart: unless-stopped
