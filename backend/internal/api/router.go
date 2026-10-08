@@ -4,13 +4,34 @@ import (
 	"net/http"
 
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/health"
+	"github.com/dataolympus/rtsp-stream-console/backend/internal/stream"
 )
 
-func NewRouter(healthHandler *health.Handler) http.Handler {
+func NewRouter(
+	healthHandler *health.Handler,
+	streamHandler *stream.Handler,
+) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthHandler.Healthz)
 	mux.HandleFunc("GET /readyz", healthHandler.Readyz)
+
+	mux.HandleFunc(
+		"POST /api/v1/streams",
+		streamHandler.Create,
+	)
+	mux.HandleFunc(
+		"GET /api/v1/streams",
+		streamHandler.List,
+	)
+	mux.HandleFunc(
+		"GET /api/v1/streams/{id}",
+		streamHandler.Get,
+	)
+	mux.HandleFunc(
+		"DELETE /api/v1/streams/{id}",
+		streamHandler.Delete,
+	)
 
 	return mux
 }

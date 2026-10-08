@@ -13,6 +13,7 @@ import (
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/api"
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/config"
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/health"
+	"github.com/dataolympus/rtsp-stream-console/backend/internal/stream"
 )
 
 func main() {
@@ -24,9 +25,16 @@ func main() {
 		return true
 	})
 
+	streamRegistry := stream.NewMemoryRegistry()
+	streamService := stream.NewService(streamRegistry)
+	streamHandler := stream.NewHandler(streamService)
+
 	server := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           api.NewRouter(healthHandler),
+		Addr: cfg.HTTPAddr,
+		Handler: api.NewRouter(
+			healthHandler,
+			streamHandler,
+		),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
