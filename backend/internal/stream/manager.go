@@ -3,6 +3,7 @@ package stream
 import (
 	"context"
 	"errors"
+	"io"
 	"sync"
 )
 
@@ -11,11 +12,16 @@ var (
 	ErrNotRunning     = errors.New("stream is not running")
 )
 
+type Runtime struct {
+	Output io.ReadCloser
+	Done   <-chan error
+}
+
 type Runner interface {
 	Start(
 		ctx context.Context,
 		sourceURL string,
-	) (<-chan error, error)
+	) (*Runtime, error)
 }
 
 type Manager struct {
@@ -70,7 +76,7 @@ func (m *Manager) Start(id string) error {
 		return err
 	}
 
-	done, err := m.runner.Start(
+	runtime, err := m.runner.Start(
 		streamCtx,
 		item.URL,
 	)
@@ -98,7 +104,7 @@ func (m *Manager) Start(id string) error {
 		go m.watchRuntime(
 			id,
 			streamCtx,
-			done,
+			runtime.Done,
 		)
 		return nil
 	}
@@ -115,7 +121,7 @@ func (m *Manager) Start(id string) error {
 	go m.watchRuntime(
 		id,
 		streamCtx,
-		done,
+		runtime.Done,
 	)
 
 	return nil

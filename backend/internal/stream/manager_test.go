@@ -3,6 +3,8 @@ package stream
 import (
 	"context"
 	"errors"
+	"io"
+	"strings"
 	"testing"
 	"time"
 )
@@ -28,7 +30,7 @@ func newFakeRunner() *fakeRunner {
 func (r *fakeRunner) Start(
 	ctx context.Context,
 	sourceURL string,
-) (<-chan error, error) {
+) (*Runtime, error) {
 	r.sourceURL = sourceURL
 
 	close(r.started)
@@ -48,7 +50,10 @@ func (r *fakeRunner) Start(
 		close(r.cancelled)
 	}()
 
-	return r.done, nil
+	return &Runtime{
+		Output: io.NopCloser(strings.NewReader("test-media")),
+		Done:   r.done,
+	}, nil
 }
 
 func waitForState(
