@@ -11,6 +11,7 @@ func NewRouter(
 	healthHandler *health.Handler,
 	streamHandler *stream.Handler,
 	websocketHandler *stream.WebSocketHandler,
+	runtimeHandler *stream.RuntimeHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
 
@@ -42,6 +43,16 @@ func NewRouter(
 	mux.HandleFunc(
 		"DELETE /api/v1/streams/{id}",
 		streamHandler.Delete,
+	)
+
+	mux.HandleFunc(
+		"POST /api/v1/streams/{id}/start",
+		runtimeHandler.Start,
+	)
+
+	mux.HandleFunc(
+		"POST /api/v1/streams/{id}/stop",
+		runtimeHandler.Stop,
 	)
 
 	mux.HandleFunc(

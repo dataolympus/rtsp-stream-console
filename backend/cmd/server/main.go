@@ -21,15 +21,43 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
+	appCtx, cancelApp := context.WithCancel(
+		context.Background(),
+	)
+	defer cancelApp()
+
 	healthHandler := health.New(func() bool {
 		return true
 	})
 
 	streamRegistry := stream.NewMemoryRegistry()
-	streamService := stream.NewService(streamRegistry)
-	streamHandler := stream.NewHandler(streamService)
+
+	streamService :=
+		stream.NewService(streamRegistry)
+
+	streamHandler :=
+		stream.NewHandler(streamService)
 
 	streamHub := stream.NewHub()
+
+	streamPump :=
+		stream.NewMediaPump(streamHub)
+
+	streamRunner :=
+		stream.NewFFmpegRunner("ffmpeg")
+
+	streamManager :=
+		stream.NewManager(
+			appCtx,
+			streamRegistry,
+			streamRunner,
+			streamPump,
+		)
+
+	runtimeHandler :=
+		stream.NewRuntimeHandler(
+			streamManager,
+		)
 
 	websocketHandler :=
 		stream.NewWebSocketHandler(
@@ -42,6 +70,7 @@ func main() {
 			healthHandler,
 			streamHandler,
 			websocketHandler,
+			runtimeHandler,
 		),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

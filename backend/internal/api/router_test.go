@@ -15,6 +15,21 @@ import (
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/stream"
 )
 
+type fakeRuntimeController struct {
+	startID string
+	stopID  string
+}
+
+func (f *fakeRuntimeController) Start(id string) error {
+	f.startID = id
+	return nil
+}
+
+func (f *fakeRuntimeController) Stop(id string) error {
+	f.stopID = id
+	return nil
+}
+
 func newTestRouterWithHub() (
 	http.Handler,
 	*stream.Hub,
@@ -28,14 +43,22 @@ func newTestRouterWithHub() (
 	streamHandler := stream.NewHandler(service)
 
 	hub := stream.NewHub()
-
 	websocketHandler :=
 		stream.NewWebSocketHandler(hub)
+
+	runtimeController :=
+		&fakeRuntimeController{}
+
+	runtimeHandler :=
+		stream.NewRuntimeHandler(
+			runtimeController,
+		)
 
 	return NewRouter(
 		healthHandler,
 		streamHandler,
 		websocketHandler,
+		runtimeHandler,
 	), hub
 }
 
@@ -299,6 +322,110 @@ func TestRouterRoutesStreamWebSocket(t *testing.T) {
 			"expected payload %q, got %q",
 			"router-media",
 			payload,
+		)
+	}
+}
+
+func TestRouterRoutesStreamStart(t *testing.T) {
+	controller := &fakeRuntimeController{}
+
+	runtimeHandler :=
+		stream.NewRuntimeHandler(controller)
+
+	healthHandler := health.New(
+		func() bool { return true },
+	)
+
+	registry := stream.NewMemoryRegistry()
+	service := stream.NewService(registry)
+	streamHandler := stream.NewHandler(service)
+
+	hub := stream.NewHub()
+	websocketHandler :=
+		stream.NewWebSocketHandler(hub)
+
+	router := NewRouter(
+		healthHandler,
+		streamHandler,
+		websocketHandler,
+		runtimeHandler,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/streams/stream-1/start",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusAccepted,
+			response.Code,
+		)
+	}
+
+	if controller.startID != "stream-1" {
+		t.Fatalf(
+			"expected start ID %q, got %q",
+			"stream-1",
+			controller.startID,
+		)
+	}
+}
+
+func TestRouterRoutesStreamStop(t *testing.T) {
+	controller := &fakeRuntimeController{}
+
+	runtimeHandler :=
+		stream.NewRuntimeHandler(controller)
+
+	healthHandler := health.New(
+		func() bool { return true },
+	)
+
+	registry := stream.NewMemoryRegistry()
+	service := stream.NewService(registry)
+	streamHandler := stream.NewHandler(service)
+
+	hub := stream.NewHub()
+	websocketHandler :=
+		stream.NewWebSocketHandler(hub)
+
+	router := NewRouter(
+		healthHandler,
+		streamHandler,
+		websocketHandler,
+		runtimeHandler,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/streams/stream-1/stop",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusAccepted,
+			response.Code,
+		)
+	}
+
+	if controller.stopID != "stream-1" {
+		t.Fatalf(
+			"expected stop ID %q, got %q",
+			"stream-1",
+			controller.stopID,
 		)
 	}
 }
