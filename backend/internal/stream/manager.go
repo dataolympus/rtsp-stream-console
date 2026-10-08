@@ -28,6 +28,7 @@ type Manager struct {
 	ctx      context.Context
 	registry Registry
 	runner   Runner
+	pump     *MediaPump
 
 	mu     sync.Mutex
 	active map[string]context.CancelFunc
@@ -37,11 +38,13 @@ func NewManager(
 	ctx context.Context,
 	registry Registry,
 	runner Runner,
+	pump *MediaPump,
 ) *Manager {
 	return &Manager{
 		ctx:      ctx,
 		registry: registry,
 		runner:   runner,
+		pump:     pump,
 		active:   make(map[string]context.CancelFunc),
 	}
 }
@@ -98,6 +101,12 @@ func (m *Manager) Start(id string) error {
 
 		return err
 	}
+
+	go m.pumpRuntime(
+		id,
+		streamCtx,
+		runtime.Output,
+	)
 
 	// Stop may have been requested while Runner.Start was still working.
 	if streamCtx.Err() != nil {
@@ -172,6 +181,10 @@ func (m *Manager) watchRuntime(
 	}
 
 	switch {
+	case item.State == StateError:
+		// Preserve the failure state set by another
+		// part of the runtime pipeline.
+
 	case item.State == StateStopping:
 		item.State = StateStopped
 
@@ -199,4 +212,56 @@ func (m *Manager) removeActive(
 	delete(m.active, id)
 
 	return cancel
+}
+
+func (m *Manager) pumpRuntime(
+	id string,
+	streamCtx context.Context,
+	output io.ReadCloser,
+) {
+	defer output.Close()
+
+	err := m.pump.Run(
+		id,
+		output,
+	)
+
+	if err == nil {
+		return
+	}
+
+	// If the stream was deliberately cancelled,
+	// a media read failure during shutdown is expected.
+	if streamCtx.Err() != nil {
+		return
+	}
+
+	item, getErr := m.registry.Get(id)
+	if getErr != nil {
+		return
+	}
+
+	if item.State == StateStopping {
+		return
+	}
+
+	item.State = StateError
+
+	if updateErr := m.registry.Update(item); updateErr != nil {
+		return
+	}
+
+	m.cancelActive(id)
+}
+
+func (m *Manager) cancelActive(
+	id string,
+) {
+	m.mu.Lock()
+	cancel := m.active[id]
+	m.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
 }

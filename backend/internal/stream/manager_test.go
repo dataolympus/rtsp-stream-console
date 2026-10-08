@@ -27,6 +27,22 @@ func newFakeRunner() *fakeRunner {
 	}
 }
 
+func newTestManager(
+	ctx context.Context,
+	registry Registry,
+	runner Runner,
+) *Manager {
+	hub := NewHub()
+	pump := NewMediaPump(hub)
+
+	return NewManager(
+		ctx,
+		registry,
+		runner,
+		pump,
+	)
+}
+
 func (r *fakeRunner) Start(
 	ctx context.Context,
 	sourceURL string,
@@ -113,7 +129,7 @@ func TestManagerStartTransitionsStreamToLive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	manager := NewManager(
+	manager := newTestManager(
 		ctx,
 		registry,
 		runner,
@@ -189,7 +205,7 @@ func TestManagerStartFailureTransitionsStreamToError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	manager := NewManager(
+	manager := newTestManager(
 		ctx,
 		registry,
 		runner,
@@ -231,7 +247,7 @@ func TestManagerStartStreamNotFound(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	manager := NewManager(
+	manager := newTestManager(
 		ctx,
 		registry,
 		runner,
@@ -267,7 +283,7 @@ func TestManagerRuntimeCompletionTransitionsStreamToStopped(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	manager := NewManager(
+	manager := newTestManager(
 		ctx,
 		registry,
 		runner,
@@ -323,7 +339,7 @@ func TestManagerRuntimeFailureTransitionsStreamToError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	manager := NewManager(
+	manager := newTestManager(
 		ctx,
 		registry,
 		runner,
@@ -379,7 +395,7 @@ func TestManagerStopTransitionsStreamToStopped(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	manager := NewManager(
+	manager := newTestManager(
 		ctx,
 		registry,
 		runner,
@@ -453,7 +469,7 @@ func TestManagerStopNotRunning(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	manager := NewManager(
+	manager := newTestManager(
 		ctx,
 		registry,
 		runner,
@@ -476,7 +492,7 @@ func TestManagerStopNotFound(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	manager := NewManager(
+	manager := newTestManager(
 		ctx,
 		registry,
 		runner,
@@ -512,7 +528,7 @@ func TestManagerRejectsDuplicateStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	manager := NewManager(
+	manager := newTestManager(
 		ctx,
 		registry,
 		runner,
@@ -581,7 +597,7 @@ func TestManagerApplicationCancellationStopsActiveStream(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	manager := NewManager(
+	manager := newTestManager(
 		ctx,
 		registry,
 		runner,
@@ -617,6 +633,82 @@ func TestManagerApplicationCancellationStopsActiveStream(t *testing.T) {
 
 	// Simulate the real process exiting because its context was cancelled.
 	runner.done <- errors.New("process terminated")
+
+	waitForState(
+		t,
+		registry,
+		item.ID,
+		StateStopped,
+	)
+}
+
+func TestManagerPublishesRuntimeOutputToHub(t *testing.T) {
+	registry := NewMemoryRegistry()
+
+	item := Stream{
+		ID:        "stream-1",
+		Name:      "Camera 1",
+		URL:       "rtsp://localhost:8554/camera-1",
+		State:     StateCreated,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := registry.Create(item); err != nil {
+		t.Fatalf("create stream: %v", err)
+	}
+
+	runner := newFakeRunner()
+
+	hub := NewHub()
+
+	media, unsubscribe := hub.Subscribe(item.ID)
+	defer unsubscribe()
+
+	pump := NewMediaPump(hub)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	manager := NewManager(
+		ctx,
+		registry,
+		runner,
+		pump,
+	)
+
+	startResult := make(chan error, 1)
+
+	go func() {
+		startResult <- manager.Start(item.ID)
+	}()
+
+	<-runner.started
+	close(runner.releaseStart)
+
+	if err := <-startResult; err != nil {
+		t.Fatalf("start stream: %v", err)
+	}
+
+	select {
+	case got := <-media:
+		if string(got) != "test-media" {
+			t.Fatalf(
+				"expected media %q, got %q",
+				"test-media",
+				got,
+			)
+		}
+
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for runtime media")
+	}
+
+	if err := manager.Stop(item.ID); err != nil {
+		t.Fatalf("stop stream: %v", err)
+	}
+
+	<-runner.cancelled
+	runner.done <- nil
 
 	waitForState(
 		t,
