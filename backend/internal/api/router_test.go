@@ -1,29 +1,48 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/health"
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/stream"
 )
 
-func newTestRouter() http.Handler {
-	healthHandler := health.New(func() bool {
-		return true
-	})
+func newTestRouterWithHub() (
+	http.Handler,
+	*stream.Hub,
+) {
+	healthHandler := health.New(
+		func() bool { return true },
+	)
 
 	registry := stream.NewMemoryRegistry()
 	service := stream.NewService(registry)
 	streamHandler := stream.NewHandler(service)
 
+	hub := stream.NewHub()
+
+	websocketHandler :=
+		stream.NewWebSocketHandler(hub)
+
 	return NewRouter(
 		healthHandler,
 		streamHandler,
-	)
+		websocketHandler,
+	), hub
+}
+
+func newTestRouter() http.Handler {
+	router, _ := newTestRouterWithHub()
+
+	return router
 }
 
 func TestRouterCreateAndListStreams(t *testing.T) {
@@ -201,6 +220,85 @@ func TestRouterDeleteStream(t *testing.T) {
 			"expected status %d after deletion, got %d",
 			http.StatusNotFound,
 			getResponse.Code,
+		)
+	}
+}
+
+func TestRouterRoutesStreamWebSocket(t *testing.T) {
+	router, hub := newTestRouterWithHub()
+
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		time.Second,
+	)
+	defer cancel()
+
+	wsURL := "ws" +
+		strings.TrimPrefix(
+			server.URL,
+			"http",
+		) +
+		"/api/v1/streams/stream-1/ws"
+
+	conn, _, err := websocket.Dial(
+		ctx,
+		wsURL,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf(
+			"dial websocket: %v",
+			err,
+		)
+	}
+	defer conn.CloseNow()
+
+	deadline := time.Now().Add(time.Second)
+
+	for time.Now().Before(deadline) {
+		if hub.SubscriberCount("stream-1") == 1 {
+			break
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if got := hub.SubscriberCount("stream-1"); got != 1 {
+		t.Fatalf(
+			"expected 1 subscriber, got %d",
+			got,
+		)
+	}
+
+	hub.Publish(
+		"stream-1",
+		[]byte("router-media"),
+	)
+
+	messageType, payload, err :=
+		conn.Read(ctx)
+	if err != nil {
+		t.Fatalf(
+			"read websocket message: %v",
+			err,
+		)
+	}
+
+	if messageType != websocket.MessageBinary {
+		t.Fatalf(
+			"expected binary message, got %v",
+			messageType,
+		)
+	}
+
+	if string(payload) != "router-media" {
+		t.Fatalf(
+			"expected payload %q, got %q",
+			"router-media",
+			payload,
 		)
 	}
 }

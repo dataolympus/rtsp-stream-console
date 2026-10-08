@@ -29,11 +29,19 @@ func main() {
 	streamService := stream.NewService(streamRegistry)
 	streamHandler := stream.NewHandler(streamService)
 
+	streamHub := stream.NewHub()
+
+	websocketHandler :=
+		stream.NewWebSocketHandler(
+			streamHub,
+		)
+
 	server := &http.Server{
 		Addr: cfg.HTTPAddr,
 		Handler: api.NewRouter(
 			healthHandler,
 			streamHandler,
+			websocketHandler,
 		),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

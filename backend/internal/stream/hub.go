@@ -83,3 +83,14 @@ func (h *Hub) Publish(
 		}
 	}
 }
+
+func (h *Hub) SubscriberCount(
+	streamID string,
+) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	return len(
+		h.subscribers[streamID],
+	)
+}

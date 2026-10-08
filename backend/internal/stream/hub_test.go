@@ -225,3 +225,38 @@ func TestHubUnsubscribeIsIdempotent(t *testing.T) {
 	unsubscribe()
 	unsubscribe()
 }
+
+func TestHubSubscriberCount(t *testing.T) {
+	hub := NewHub()
+
+	_, unsubscribeFirst :=
+		hub.Subscribe("stream-1")
+
+	_, unsubscribeSecond :=
+		hub.Subscribe("stream-1")
+
+	if got := hub.SubscriberCount("stream-1"); got != 2 {
+		t.Fatalf(
+			"expected 2 subscribers, got %d",
+			got,
+		)
+	}
+
+	unsubscribeFirst()
+
+	if got := hub.SubscriberCount("stream-1"); got != 1 {
+		t.Fatalf(
+			"expected 1 subscriber, got %d",
+			got,
+		)
+	}
+
+	unsubscribeSecond()
+
+	if got := hub.SubscriberCount("stream-1"); got != 0 {
+		t.Fatalf(
+			"expected 0 subscribers, got %d",
+			got,
+		)
+	}
+}
