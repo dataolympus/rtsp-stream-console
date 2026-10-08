@@ -180,3 +180,55 @@ func TestMemoryRegistryConcurrentCreates(t *testing.T) {
 		t.Fatalf("expected %d streams, got %d", count, len(got))
 	}
 }
+
+func TestMemoryRegistryUpdate(t *testing.T) {
+	registry := NewMemoryRegistry()
+
+	original := Stream{
+		ID:        "stream-1",
+		Name:      "Camera 1",
+		URL:       "rtsp://localhost:8554/camera-1",
+		State:     StateCreated,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := registry.Create(original); err != nil {
+		t.Fatalf("create stream: %v", err)
+	}
+
+	updated := original
+	updated.State = StateConnecting
+
+	if err := registry.Update(updated); err != nil {
+		t.Fatalf("update stream: %v", err)
+	}
+
+	got, err := registry.Get(original.ID)
+	if err != nil {
+		t.Fatalf("get stream: %v", err)
+	}
+
+	if got.State != StateConnecting {
+		t.Fatalf(
+			"expected state %q, got %q",
+			StateConnecting,
+			got.State,
+		)
+	}
+}
+
+func TestMemoryRegistryUpdateNotFound(t *testing.T) {
+	registry := NewMemoryRegistry()
+
+	err := registry.Update(Stream{
+		ID:    "missing",
+		State: StateConnecting,
+	})
+
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf(
+			"expected ErrNotFound, got %v",
+			err,
+		)
+	}
+}

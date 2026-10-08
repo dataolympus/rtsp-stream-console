@@ -15,6 +15,7 @@ type Registry interface {
 	Create(Stream) error
 	Get(string) (Stream, error)
 	List() []Stream
+	Update(Stream) error
 	Delete(string) error
 }
 
@@ -73,6 +74,19 @@ func (r *MemoryRegistry) List() []Stream {
 	})
 
 	return streams
+}
+
+func (r *MemoryRegistry) Update(stream Stream) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, exists := r.streams[stream.ID]; !exists {
+		return ErrNotFound
+	}
+
+	r.streams[stream.ID] = stream
+
+	return nil
 }
 
 func (r *MemoryRegistry) Delete(id string) error {
