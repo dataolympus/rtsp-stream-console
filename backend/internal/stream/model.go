@@ -8,8 +8,9 @@ const (
 	StateCreated    State = "created"
 	StateConnecting State = "connecting"
 	StateLive       State = "live"
-	StateError      State = "error"
+	StateStopping   State = "stopping"
 	StateStopped    State = "stopped"
+	StateError      State = "error"
 )
 
 type Stream struct {
