@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -52,7 +53,7 @@ func (r *FFmpegRunner) Start(
 		r.args(sourceURL)...,
 	)
 
-	stdout, err := cmd.StdoutPipe()
+	stdoutReader, stdoutWriter, err := os.Pipe()
 	if err != nil {
 		return nil, fmt.Errorf(
 			"create ffmpeg stdout pipe: %w",
@@ -60,15 +61,25 @@ func (r *FFmpegRunner) Start(
 		)
 	}
 
+	cmd.Stdout = stdoutWriter
+
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
 	if err := cmd.Start(); err != nil {
+		_ = stdoutReader.Close()
+		_ = stdoutWriter.Close()
+
 		return nil, fmt.Errorf(
 			"start ffmpeg: %w",
 			err,
 		)
 	}
+
+	// The child process now owns its inherited stdout descriptor.
+	// Close the parent's writer copy so the reader receives EOF
+	// when the child exits.
+	_ = stdoutWriter.Close()
 
 	done := make(chan error, 1)
 
@@ -94,7 +105,7 @@ func (r *FFmpegRunner) Start(
 	}()
 
 	return &Runtime{
-		Output: stdout,
+		Output: stdoutReader,
 		Done:   done,
 	}, nil
 }
