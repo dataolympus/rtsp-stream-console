@@ -244,7 +244,8 @@ func (m *Manager) watchRuntime(
 		item.Error = "stream source became unavailable"
 
 	default:
-		item.State = StateStopped
+		item.State = StateError
+		item.Error = "stream source became unavailable"
 	}
 
 	_ = m.registry.Update(item)

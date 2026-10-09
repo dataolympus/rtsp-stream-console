@@ -330,7 +330,7 @@ func TestManagerStartStreamNotFound(t *testing.T) {
 	}
 }
 
-func TestManagerRuntimeCompletionTransitionsStreamToStopped(t *testing.T) {
+func TestManagerUnexpectedRuntimeCompletionTransitionsStreamToError(t *testing.T) {
 	registry := NewMemoryRegistry()
 
 	item := Stream{
@@ -378,12 +378,20 @@ func TestManagerRuntimeCompletionTransitionsStreamToStopped(t *testing.T) {
 
 	runner.done <- nil
 
-	waitForState(
+	got := waitForState(
 		t,
 		registry,
 		item.ID,
-		StateStopped,
+		StateError,
 	)
+
+	if got.Error != "stream source became unavailable" {
+		t.Fatalf(
+			"expected runtime completion error %q, got %q",
+			"stream source became unavailable",
+			got.Error,
+		)
+	}
 }
 
 func TestManagerRuntimeFailureTransitionsStreamToError(t *testing.T) {
