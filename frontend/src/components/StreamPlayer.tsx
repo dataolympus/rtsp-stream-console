@@ -1,7 +1,12 @@
 import {
     useEffect,
     useRef,
+    useState,
 } from 'react';
+
+import {
+    Button,
+} from '@patternfly/react-core';
 
 import mpegts from 'mpegts.js';
 
@@ -33,8 +38,16 @@ function StreamPlayer({
     const videoRef =
         useRef<HTMLVideoElement>(null);
 
+    const [
+        isViewerPlaying,
+        setIsViewerPlaying,
+    ] = useState(true);
+
     useEffect(() => {
-        if (!isLive) {
+        if (
+            !isLive ||
+            !isViewerPlaying
+        ) {
             return;
         }
 
@@ -72,23 +85,46 @@ function StreamPlayer({
         };
     }, [
         isLive,
+        isViewerPlaying,
         streamId,
     ]);
 
     return (
-        <video
-            ref={videoRef}
-            aria-label={`${streamName} player`}
-            controls
-            muted
-            playsInline
-            style={{
-                width: '100%',
-                aspectRatio: '16 / 9',
-                background: '#000',
-                objectFit: 'contain',
-            }}
-        />
+        <>
+            <video
+                ref={videoRef}
+                aria-label={`${streamName} player`}
+                controls
+                muted
+                playsInline
+                style={{
+                    width: '100%',
+                    aspectRatio: '16 / 9',
+                    background: '#000',
+                    objectFit: 'contain',
+                }}
+            />
+
+            {isLive && (
+                <Button
+                    variant="secondary"
+                    aria-label={
+                        isViewerPlaying
+                            ? `Pause ${streamName}`
+                            : `Play ${streamName}`
+                    }
+                    onClick={() => {
+                        setIsViewerPlaying(
+                            (current) => !current,
+                        );
+                    }}
+                >
+                    {isViewerPlaying
+                        ? 'Pause'
+                        : 'Play'}
+                </Button>
+            )}
+        </>
     );
 }
 

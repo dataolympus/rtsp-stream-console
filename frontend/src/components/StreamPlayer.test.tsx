@@ -2,6 +2,7 @@ import {
     render,
     screen,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {
     beforeEach,
     describe,
@@ -141,5 +142,57 @@ describe('StreamPlayer', () => {
             detachMediaElement,
         ).toHaveBeenCalled();
         expect(destroy).toHaveBeenCalled();
+    });
+
+    it('pauses and resumes the viewer without stopping the stream', async () => {
+        const user = userEvent.setup();
+
+        render(
+            <StreamPlayer
+                streamId="stream-1"
+                streamName="Camera 1"
+                isLive
+            />,
+        );
+
+        expect(
+            vi.mocked(mpegts.createPlayer),
+        ).toHaveBeenCalledTimes(1);
+
+        await user.click(
+            screen.getByRole('button', {
+                name: /pause camera 1/i,
+            }),
+        );
+
+        expect(pause).toHaveBeenCalledTimes(1);
+        expect(unload).toHaveBeenCalledTimes(1);
+        expect(
+            detachMediaElement,
+        ).toHaveBeenCalledTimes(1);
+        expect(destroy).toHaveBeenCalledTimes(1);
+
+        // Pausing the viewer should destroy the existing
+        // player, not create another one yet.
+        expect(
+            vi.mocked(mpegts.createPlayer),
+        ).toHaveBeenCalledTimes(1);
+
+        await user.click(
+            screen.getByRole('button', {
+                name: /play camera 1/i,
+            }),
+        );
+
+        expect(
+            vi.mocked(mpegts.createPlayer),
+        ).toHaveBeenCalledTimes(2);
+
+        expect(
+            attachMediaElement,
+        ).toHaveBeenCalledTimes(2);
+
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(play).toHaveBeenCalledTimes(2);
     });
 });
