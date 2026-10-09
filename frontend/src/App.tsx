@@ -24,6 +24,8 @@ import {
 
 import '@patternfly/react-core/dist/styles/base.css';
 
+import StreamPlayer from './components/StreamPlayer';
+
 type Stream = {
   id: string;
   name: string;
@@ -219,6 +221,14 @@ function App() {
             </CardTitle>
 
             <CardBody>
+              {stream.state === 'live' && (
+                <StreamPlayer
+                  streamId={stream.id}
+                  streamName={stream.name}
+                  isLive
+                />
+              )}
+
               <div>{stream.url}</div>
 
               <Label>

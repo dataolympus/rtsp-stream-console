@@ -22,6 +22,18 @@ beforeEach(() => {
     vi.stubGlobal('fetch', fetchMock);
 });
 
+vi.mock('./components/StreamPlayer', () => ({
+    default: ({
+        streamName,
+    }: {
+        streamName: string;
+    }) => (
+        <div
+            aria-label={`${streamName} player`}
+        />
+    ),
+}));
+
 describe('App', () => {
     it('renders the stream console', () => {
         render(<App />);
@@ -298,6 +310,30 @@ describe('App', () => {
 
         expect(
             await screen.findByText('stopped'),
+        ).toBeInTheDocument();
+    });
+
+    it('shows the player for a live stream', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => [
+                {
+                    id: 'stream-1',
+                    name: 'Camera 1',
+                    url: 'rtsp://localhost:8554/camera-1',
+                    state: 'live',
+                    createdAt: '2026-10-09T00:00:00Z',
+                },
+            ],
+        });
+
+        render(<App />);
+
+        expect(
+            await screen.findByLabelText(
+                /camera 1 player/i,
+            ),
         ).toBeInTheDocument();
     });
 });
