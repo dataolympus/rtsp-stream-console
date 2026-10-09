@@ -1,4 +1,8 @@
-import { useState } from 'react';
+import {
+  useEffect,
+  useState,
+} from 'react';
+import type { FormEvent } from 'react';
 
 import {
   Button,
@@ -12,19 +16,91 @@ import {
   PageSection,
   TextInput,
   Title,
+  Card,
+  CardBody,
+  CardTitle,
+  Label,
 } from '@patternfly/react-core';
 
 import '@patternfly/react-core/dist/styles/base.css';
+
+type Stream = {
+  id: string;
+  name: string;
+  url: string;
+  state:
+  | 'created'
+  | 'connecting'
+  | 'live'
+  | 'stopping'
+  | 'stopped'
+  | 'error';
+  createdAt: string;
+};
 
 function App() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
+  const [streams, setStreams] = useState<Stream[]>([]);
+
+  useEffect(() => {
+    const loadStreams = async () => {
+      const response = await fetch(
+        '/api/v1/streams',
+      );
+
+      if (!response.ok) {
+        return;
+      }
+
+      const existing =
+        (await response.json()) as Stream[];
+
+      setStreams(existing);
+    };
+
+    void loadStreams();
+  }, []);
 
   const closeAddStream = () => {
     setIsAddOpen(false);
     setName('');
     setUrl('');
+  };
+
+  const createStream = async (
+    event: FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+
+    const response = await fetch(
+      '/api/v1/streams',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          url,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      return;
+    }
+
+    const created =
+      (await response.json()) as Stream;
+
+    setStreams((current) => [
+      ...current,
+      created,
+    ]);
+
+    closeAddStream();
   };
 
   return (
@@ -44,6 +120,24 @@ function App() {
         </Button>
       </PageSection>
 
+      <PageSection>
+        {streams.map((stream) => (
+          <Card key={stream.id}>
+            <CardTitle>
+              {stream.name}
+            </CardTitle>
+
+            <CardBody>
+              <div>{stream.url}</div>
+
+              <Label>
+                {stream.state}
+              </Label>
+            </CardBody>
+          </Card>
+        ))}
+      </PageSection>
+
       <Modal
         isOpen={isAddOpen}
         onClose={closeAddStream}
@@ -55,7 +149,10 @@ function App() {
         />
 
         <ModalBody>
-          <Form id="add-stream-form">
+          <Form
+            id="add-stream-form"
+            onSubmit={createStream}
+          >
             <FormGroup
               label="Name"
               fieldId="stream-name"
