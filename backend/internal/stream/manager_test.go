@@ -133,7 +133,9 @@ func waitForState(
 	return Stream{}
 }
 
-func TestManagerStartTransitionsStreamToLive(t *testing.T) {
+func TestManagerTransitionsStreamToLiveAfterMediaArrives(
+	t *testing.T,
+) {
 	registry := NewMemoryRegistry()
 
 	item := Stream{
@@ -145,12 +147,17 @@ func TestManagerStartTransitionsStreamToLive(t *testing.T) {
 	}
 
 	if err := registry.Create(item); err != nil {
-		t.Fatalf("create stream: %v", err)
+		t.Fatalf(
+			"create stream: %v",
+			err,
+		)
 	}
 
 	runner := newFakeRunner()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(
+		context.Background(),
+	)
 	defer cancel()
 
 	manager := newTestManager(
@@ -169,12 +176,15 @@ func TestManagerStartTransitionsStreamToLive(t *testing.T) {
 
 	connecting, err := registry.Get(item.ID)
 	if err != nil {
-		t.Fatalf("get connecting stream: %v", err)
+		t.Fatalf(
+			"get connecting stream: %v",
+			err,
+		)
 	}
 
 	if connecting.State != StateConnecting {
 		t.Fatalf(
-			"expected state %q, got %q",
+			"expected state %q while runtime starts, got %q",
 			StateConnecting,
 			connecting.State,
 		)
@@ -183,17 +193,22 @@ func TestManagerStartTransitionsStreamToLive(t *testing.T) {
 	close(runner.releaseStart)
 
 	if err := <-startResult; err != nil {
-		t.Fatalf("start stream: %v", err)
+		t.Fatalf(
+			"start stream: %v",
+			err,
+		)
 	}
 
-	live, err := registry.Get(item.ID)
-	if err != nil {
-		t.Fatalf("get live stream: %v", err)
-	}
+	live := waitForState(
+		t,
+		registry,
+		item.ID,
+		StateLive,
+	)
 
 	if live.State != StateLive {
 		t.Fatalf(
-			"expected state %q, got %q",
+			"expected state %q after media arrives, got %q",
 			StateLive,
 			live.State,
 		)
@@ -201,11 +216,31 @@ func TestManagerStartTransitionsStreamToLive(t *testing.T) {
 
 	if runner.sourceURL != item.URL {
 		t.Fatalf(
-			"expected runner URL %q, got %q",
+			"expected runner source URL %q, got %q",
 			item.URL,
 			runner.sourceURL,
 		)
 	}
+
+	if err := manager.Stop(item.ID); err != nil {
+		t.Fatalf(
+			"stop stream: %v",
+			err,
+		)
+	}
+
+	<-runner.cancelled
+
+	runner.done <- errors.New(
+		"process terminated",
+	)
+
+	waitForState(
+		t,
+		registry,
+		item.ID,
+		StateStopped,
+	)
 }
 
 func TestManagerStartFailureTransitionsStreamToError(t *testing.T) {
@@ -953,4 +988,117 @@ func TestManagerPumpFailureTransitionsStreamToError(
 			final.Error,
 		)
 	}
+}
+
+func TestManagerRemainsConnectingUntilMediaArrives(
+	t *testing.T,
+) {
+	registry := NewMemoryRegistry()
+
+	item := Stream{
+		ID:        "stream-1",
+		Name:      "Camera 1",
+		URL:       "rtsp://localhost:8554/camera-1",
+		State:     StateCreated,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := registry.Create(item); err != nil {
+		t.Fatalf(
+			"create stream: %v",
+			err,
+		)
+	}
+
+	reader, writer := io.Pipe()
+	defer writer.Close()
+
+	runner := newFakeRunner()
+	runner.output = reader
+
+	ctx, cancel := context.WithCancel(
+		context.Background(),
+	)
+	defer cancel()
+
+	manager := newTestManager(
+		ctx,
+		registry,
+		runner,
+	)
+
+	startResult := make(chan error, 1)
+
+	go func() {
+		startResult <- manager.Start(item.ID)
+	}()
+
+	<-runner.started
+	close(runner.releaseStart)
+
+	if err := <-startResult; err != nil {
+		t.Fatalf(
+			"start stream: %v",
+			err,
+		)
+	}
+
+	connecting, err := registry.Get(item.ID)
+	if err != nil {
+		t.Fatalf(
+			"get stream: %v",
+			err,
+		)
+	}
+
+	if connecting.State != StateConnecting {
+		t.Fatalf(
+			"expected state %q before media arrives, got %q",
+			StateConnecting,
+			connecting.State,
+		)
+	}
+
+	if _, err := writer.Write(
+		[]byte("test-media"),
+	); err != nil {
+		t.Fatalf(
+			"write media: %v",
+			err,
+		)
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatalf(
+			"close media writer: %v",
+			err,
+		)
+	}
+
+	waitForState(
+		t,
+		registry,
+		item.ID,
+		StateLive,
+	)
+
+	if err := manager.Stop(item.ID); err != nil {
+		t.Fatalf(
+			"stop stream: %v",
+			err,
+		)
+	}
+
+	<-runner.cancelled
+
+	runner.done <- errors.New(
+		"process terminated",
+	)
+
+	waitForState(
+		t,
+		registry,
+		item.ID,
+		StateStopped,
+	)
 }

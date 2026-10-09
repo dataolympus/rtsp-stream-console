@@ -17,6 +17,29 @@ type Runtime struct {
 	Done   <-chan error
 }
 
+type firstReadCloser struct {
+	io.ReadCloser
+
+	once        sync.Once
+	onFirstRead func()
+}
+
+func (r *firstReadCloser) Read(
+	p []byte,
+) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+
+	if n > 0 {
+		r.once.Do(func() {
+			if r.onFirstRead != nil {
+				r.onFirstRead()
+			}
+		})
+	}
+
+	return n, err
+}
+
 type Runner interface {
 	Start(
 		ctx context.Context,
@@ -32,6 +55,27 @@ type Manager struct {
 
 	mu     sync.Mutex
 	active map[string]context.CancelFunc
+}
+
+func (m *Manager) markLive(
+	id string,
+	streamCtx context.Context,
+) {
+	if streamCtx.Err() != nil {
+		return
+	}
+
+	item, err := m.registry.Get(id)
+	if err != nil {
+		return
+	}
+
+	if item.State != StateConnecting {
+		return
+	}
+
+	item.State = StateLive
+	_ = m.registry.Update(item)
 }
 
 func NewManager(
@@ -104,10 +148,20 @@ func (m *Manager) Start(id string) error {
 		return err
 	}
 
+	output := &firstReadCloser{
+		ReadCloser: runtime.Output,
+		onFirstRead: func() {
+			m.markLive(
+				id,
+				streamCtx,
+			)
+		},
+	}
+
 	go m.pumpRuntime(
 		id,
 		streamCtx,
-		runtime.Output,
+		output,
 	)
 
 	// Stop may have been requested while Runner.Start was still working.
@@ -117,16 +171,8 @@ func (m *Manager) Start(id string) error {
 			streamCtx,
 			runtime.Done,
 		)
+
 		return nil
-	}
-
-	item.State = StateLive
-
-	if err := m.registry.Update(item); err != nil {
-		m.removeActive(id)
-		cancel()
-
-		return err
 	}
 
 	go m.watchRuntime(
