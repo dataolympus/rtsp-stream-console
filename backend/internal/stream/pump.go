@@ -33,15 +33,9 @@ func (p *MediaPump) Run(
 		n, err := reader.Read(buffer)
 
 		if n > 0 {
-			payload := make([]byte, n)
-			copy(
-				payload,
-				buffer[:n],
-			)
-
 			p.hub.Publish(
 				streamID,
-				payload,
+				buffer[:n],
 			)
 		}
 

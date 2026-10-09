@@ -1,6 +1,9 @@
 package stream
 
-import "sync"
+import (
+	"bytes"
+	"sync"
+)
 
 type Hub struct {
 	mu          sync.RWMutex
@@ -19,7 +22,12 @@ func NewHub() *Hub {
 func (h *Hub) Subscribe(
 	streamID string,
 ) (<-chan []byte, func()) {
-	ch := make(chan []byte, 1)
+	const subscriberBufferSize = 64
+
+	ch := make(
+		chan []byte,
+		subscriberBufferSize,
+	)
 
 	h.mu.Lock()
 
@@ -71,16 +79,39 @@ func (h *Hub) Publish(
 	streamID string,
 	payload []byte,
 ) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	// Publish retains payload beyond this call.
+	// Clone it so callers may safely reuse their input buffer.
+	ownedPayload := bytes.Clone(payload)
 
-	for _, subscriber := range h.subscribers[streamID] {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	streamSubscribers :=
+		h.subscribers[streamID]
+
+	for id, subscriber := range streamSubscribers {
+
 		select {
-		case subscriber <- payload:
+		case subscriber <- ownedPayload:
+
 		default:
-			// Subscriber is behind.
-			// Drop this chunk rather than blocking the stream.
+			// This viewer can no longer keep up with
+			// the live stream. Remove it instead of
+			// silently corrupting its byte stream.
+			delete(
+				streamSubscribers,
+				id,
+			)
+
+			close(subscriber)
 		}
+	}
+
+	if len(streamSubscribers) == 0 {
+		delete(
+			h.subscribers,
+			streamID,
+		)
 	}
 }
 

@@ -260,3 +260,134 @@ func TestHubSubscriberCount(t *testing.T) {
 		)
 	}
 }
+
+func TestHubPublishOwnsPayload(t *testing.T) {
+	hub := NewHub()
+
+	subscriber, unsubscribe := hub.Subscribe(
+		"stream-1",
+	)
+	defer unsubscribe()
+
+	payload := []byte{
+		0x47,
+		0x01,
+		0x02,
+		0x03,
+	}
+
+	expected := append(
+		[]byte(nil),
+		payload...,
+	)
+
+	hub.Publish(
+		"stream-1",
+		payload,
+	)
+
+	// Simulate MediaPump reusing its read buffer.
+	for index := range payload {
+		payload[index] = 0x5c
+	}
+
+	select {
+	case got := <-subscriber:
+		if !bytes.Equal(
+			got,
+			expected,
+		) {
+			t.Fatalf(
+				"expected %v, got %v",
+				expected,
+				got,
+			)
+		}
+
+	case <-time.After(time.Second):
+		t.Fatal(
+			"timed out waiting for payload",
+		)
+	}
+}
+
+func TestHubBuffersShortBurst(t *testing.T) {
+	hub := NewHub()
+
+	subscriber, unsubscribe :=
+		hub.Subscribe("stream-1")
+	defer unsubscribe()
+
+	const messageCount = 8
+
+	for index := 0; index < messageCount; index++ {
+		hub.Publish(
+			"stream-1",
+			[]byte{byte(index)},
+		)
+	}
+
+	for expected := 0; expected < messageCount; expected++ {
+		select {
+		case payload, ok := <-subscriber:
+			if !ok {
+				t.Fatal(
+					"subscriber closed during normal burst",
+				)
+			}
+
+			if len(payload) != 1 ||
+				payload[0] != byte(expected) {
+				t.Fatalf(
+					"expected payload %d, got %v",
+					expected,
+					payload,
+				)
+			}
+
+		case <-time.After(time.Second):
+			t.Fatalf(
+				"timed out waiting for payload %d",
+				expected,
+			)
+		}
+	}
+}
+
+func TestHubEvictsSubscriberWhenBufferIsFull(
+	t *testing.T,
+) {
+	hub := NewHub()
+
+	subscriber, unsubscribe :=
+		hub.Subscribe("stream-1")
+	defer unsubscribe()
+
+	// Fill whatever capacity the Hub provides.
+	for index := 0; index < cap(subscriber); index++ {
+		hub.Publish(
+			"stream-1",
+			[]byte{byte(index)},
+		)
+	}
+
+	if got := hub.SubscriberCount("stream-1"); got != 1 {
+		t.Fatalf(
+			"expected 1 subscriber before overflow, got %d",
+			got,
+		)
+	}
+
+	// One more payload means this viewer cannot keep up.
+	hub.Publish(
+		"stream-1",
+		[]byte("overflow"),
+	)
+
+	if got := hub.SubscriberCount("stream-1"); got != 0 {
+		t.Fatalf(
+			"expected slow subscriber to be removed, got %d",
+			got,
+		)
+	}
+}
