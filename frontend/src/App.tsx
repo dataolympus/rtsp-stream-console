@@ -6,20 +6,22 @@ import type { FormEvent } from 'react';
 
 import {
   Button,
+  Card,
+  CardBody,
+  CardTitle,
   Form,
   FormGroup,
+  Grid,
+  GridItem,
+  Label,
   Modal,
   ModalBody,
-  ModalFooter,
   ModalHeader,
+  ModalFooter,
   Page,
   PageSection,
   TextInput,
   Title,
-  Card,
-  CardBody,
-  CardTitle,
-  Label,
 } from '@patternfly/react-core';
 
 import '@patternfly/react-core/dist/styles/base.css';
@@ -214,69 +216,78 @@ function App() {
       </PageSection>
 
       <PageSection>
-        {streams.map((stream) => (
-          <Card key={stream.id}>
-            <CardTitle>
-              {stream.name}
-            </CardTitle>
+        <Grid hasGutter>
+          {streams.map((stream) => (
+            <GridItem
+              key={stream.id}
+              span={12}
+              md={6}
+              xl={4}
+            >
+              <Card isFullHeight>
+                <CardTitle>
+                  {stream.name}
+                </CardTitle>
 
-            <CardBody>
-              {stream.state === 'live' && (
-                <StreamPlayer
-                  streamId={stream.id}
-                  streamName={stream.name}
-                  isLive
-                />
-              )}
+                <CardBody>
+                  {stream.state === 'live' && (
+                    <StreamPlayer
+                      streamId={stream.id}
+                      streamName={stream.name}
+                      isLive
+                    />
+                  )}
 
-              <div>{stream.url}</div>
+                  <div>{stream.url}</div>
 
-              <Label>
-                {stream.state}
-              </Label>
+                  <Label>
+                    {stream.state}
+                  </Label>
 
-              {(
-                stream.state === 'created' ||
-                stream.state === 'stopped' ||
-                stream.state === 'error'
-              ) && (
-                  <Button
-                    variant="primary"
-                    aria-label={`Start ${stream.name}`}
-                    onClick={() => {
-                      void startStream(stream);
-                    }}
-                  >
-                    Start
-                  </Button>
-                )}
+                  {(
+                    stream.state === 'created' ||
+                    stream.state === 'stopped' ||
+                    stream.state === 'error'
+                  ) && (
+                      <Button
+                        variant="primary"
+                        aria-label={`Start ${stream.name}`}
+                        onClick={() => {
+                          void startStream(stream);
+                        }}
+                      >
+                        Start
+                      </Button>
+                    )}
 
-              {(
-                stream.state === 'live' ||
-                stream.state === 'connecting'
-              ) && (
-                  <Button
-                    variant="secondary"
-                    aria-label={`Stop ${stream.name}`}
-                    onClick={() => {
-                      void stopStream(stream);
-                    }}
-                  >
-                    Stop
-                  </Button>
-                )}
+                  {(
+                    stream.state === 'live' ||
+                    stream.state === 'connecting'
+                  ) && (
+                      <Button
+                        variant="secondary"
+                        aria-label={`Stop ${stream.name}`}
+                        onClick={() => {
+                          void stopStream(stream);
+                        }}
+                      >
+                        Stop
+                      </Button>
+                    )}
 
-              {stream.state === 'stopping' && (
-                <Button
-                  variant="secondary"
-                  isDisabled
-                >
-                  Stopping
-                </Button>
-              )}
-            </CardBody>
-          </Card>
-        ))}
+                  {stream.state === 'stopping' && (
+                    <Button
+                      variant="secondary"
+                      isDisabled
+                    >
+                      Stopping
+                    </Button>
+                  )}
+                </CardBody>
+              </Card>
+            </GridItem>
+          ))}
+        </Grid>
       </PageSection>
 
       <Modal

@@ -336,4 +336,57 @@ describe('App', () => {
             ),
         ).toBeInTheDocument();
     });
+
+    it('renders multiple streams independently', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => [
+                {
+                    id: 'stream-1',
+                    name: 'Camera 1',
+                    url: 'rtsp://localhost:8554/camera-1',
+                    state: 'live',
+                    createdAt: '2026-10-09T00:00:00Z',
+                },
+                {
+                    id: 'stream-2',
+                    name: 'Camera 2',
+                    url: 'rtsp://localhost:8554/camera-2',
+                    state: 'live',
+                    createdAt: '2026-10-09T00:00:01Z',
+                },
+            ],
+        });
+
+        render(<App />);
+
+        expect(
+            await screen.findByText('Camera 1'),
+        ).toBeInTheDocument();
+
+        expect(
+            screen.getByText('Camera 2'),
+        ).toBeInTheDocument();
+
+        expect(
+            screen.getByLabelText(/camera 1 player/i),
+        ).toBeInTheDocument();
+
+        expect(
+            screen.getByLabelText(/camera 2 player/i),
+        ).toBeInTheDocument();
+
+        expect(
+            screen.getByRole('button', {
+                name: /stop camera 1/i,
+            }),
+        ).toBeInTheDocument();
+
+        expect(
+            screen.getByRole('button', {
+                name: /stop camera 2/i,
+            }),
+        ).toBeInTheDocument();
+    });
 });

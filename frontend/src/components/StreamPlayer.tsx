@@ -78,11 +78,16 @@ function StreamPlayer({
     return (
         <video
             ref={videoRef}
-            aria-label={`${streamName} video`}
-            muted
-            autoPlay
-            playsInline
+            aria-label={`${streamName} player`}
             controls
+            muted
+            playsInline
+            style={{
+                width: '100%',
+                aspectRatio: '16 / 9',
+                background: '#000',
+                objectFit: 'contain',
+            }}
         />
     );
 }

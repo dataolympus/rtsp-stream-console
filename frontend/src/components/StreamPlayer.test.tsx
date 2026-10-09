@@ -69,7 +69,7 @@ describe('StreamPlayer', () => {
         );
 
         const video = screen.getByLabelText(
-            /camera 1 video/i,
+            /camera 1 player/i,
         );
 
         expect(video).toBeInTheDocument();
@@ -104,7 +104,9 @@ describe('StreamPlayer', () => {
         );
 
         expect(
-            screen.getByLabelText(/camera 1 video/i),
+            screen.getByLabelText(
+                /camera 1 player/i,
+            ),
         ).toBeInTheDocument();
 
         expect(
