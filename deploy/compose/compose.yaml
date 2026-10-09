@@ -1,0 +1,70 @@
+services:
+  backend:
+    build:
+      context: ../../backend
+    image: rtsp-stream-console-backend:dev
+    environment:
+      HTTP_ADDR: ":8080"
+    expose:
+      - "8080"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://127.0.0.1:8080/readyz"
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  frontend:
+    build:
+      context: ../../frontend
+    image: rtsp-stream-console-frontend:dev
+    ports:
+      - "8082:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    profiles:
+      - demo
+    ports:
+      - "8554:8554"
+    restart: unless-stopped
+
+  test-camera:
+    image: rtsp-stream-console-backend:dev
+    profiles:
+      - demo
+    entrypoint:
+      - ffmpeg
+    command:
+      - -re
+      - -f
+      - lavfi
+      - -i
+      - testsrc2=size=1280x720:rate=15
+      - -c:v
+      - libx264
+      - -preset
+      - ultrafast
+      - -tune
+      - zerolatency
+      - -pix_fmt
+      - yuv420p
+      - -rtsp_transport
+      - tcp
+      - -f
+      - rtsp
+      - rtsp://mediamtx:8554/camera-1
+    depends_on:
+      - mediamtx
+    restart: unless-stopped
