@@ -16,6 +16,22 @@ type fakeRunner struct {
 	cancelled    chan struct{}
 	startErr     error
 	sourceURL    string
+
+	output io.ReadCloser
+}
+
+type failingReadCloser struct{}
+
+func (failingReadCloser) Read(
+	[]byte,
+) (int, error) {
+	return 0, errors.New(
+		"media read failed",
+	)
+}
+
+func (failingReadCloser) Close() error {
+	return nil
 }
 
 func newFakeRunner() *fakeRunner {
@@ -66,8 +82,16 @@ func (r *fakeRunner) Start(
 		close(r.cancelled)
 	}()
 
+	output := r.output
+
+	if output == nil {
+		output = io.NopCloser(
+			strings.NewReader("test-media"),
+		)
+	}
+
 	return &Runtime{
-		Output: io.NopCloser(strings.NewReader("test-media")),
+		Output: output,
 		Done:   r.done,
 	}, nil
 }
@@ -238,6 +262,14 @@ func TestManagerStartFailureTransitionsStreamToError(t *testing.T) {
 			got.State,
 		)
 	}
+
+	if got.Error != "stream processor failed to start" {
+		t.Fatalf(
+			"expected start failure error %q, got %q",
+			"stream processor failed to start",
+			got.Error,
+		)
+	}
 }
 
 func TestManagerStartStreamNotFound(t *testing.T) {
@@ -367,11 +399,122 @@ func TestManagerRuntimeFailureTransitionsStreamToError(t *testing.T) {
 
 	runner.done <- errors.New("runtime failed")
 
-	waitForState(
+	got := waitForState(
 		t,
 		registry,
 		item.ID,
 		StateError,
+	)
+
+	if got.Error != "stream source became unavailable" {
+		t.Fatalf(
+			"expected error %q, got %q",
+			"stream source became unavailable",
+			got.Error,
+		)
+	}
+}
+
+func TestManagerRetryClearsPreviousError(t *testing.T) {
+	registry := NewMemoryRegistry()
+
+	item := Stream{
+		ID:        "stream-1",
+		Name:      "Camera 1",
+		URL:       "rtsp://localhost:8554/camera-1",
+		State:     StateError,
+		Error:     "stream source became unavailable",
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := registry.Create(item); err != nil {
+		t.Fatalf("create stream: %v", err)
+	}
+
+	runner := newFakeRunner()
+
+	ctx, cancel := context.WithCancel(
+		context.Background(),
+	)
+	defer cancel()
+
+	manager := newTestManager(
+		ctx,
+		registry,
+		runner,
+	)
+
+	startResult := make(chan error, 1)
+
+	go func() {
+		startResult <- manager.Start(item.ID)
+	}()
+
+	<-runner.started
+
+	connecting, err := registry.Get(item.ID)
+	if err != nil {
+		t.Fatalf(
+			"get connecting stream: %v",
+			err,
+		)
+	}
+
+	if connecting.State != StateConnecting {
+		t.Fatalf(
+			"expected state %q, got %q",
+			StateConnecting,
+			connecting.State,
+		)
+	}
+
+	if connecting.Error != "" {
+		t.Fatalf(
+			"expected previous error to be cleared, got %q",
+			connecting.Error,
+		)
+	}
+
+	close(runner.releaseStart)
+
+	if err := <-startResult; err != nil {
+		t.Fatalf(
+			"retry stream: %v",
+			err,
+		)
+	}
+
+	live := waitForState(
+		t,
+		registry,
+		item.ID,
+		StateLive,
+	)
+
+	if live.Error != "" {
+		t.Fatalf(
+			"expected live stream error to be empty, got %q",
+			live.Error,
+		)
+	}
+
+	// Clean up the fake runtime.
+	if err := manager.Stop(item.ID); err != nil {
+		t.Fatalf(
+			"stop stream: %v",
+			err,
+		)
+	}
+
+	<-runner.cancelled
+
+	runner.done <- nil
+
+	waitForState(
+		t,
+		registry,
+		item.ID,
+		StateStopped,
 	)
 }
 
@@ -716,4 +859,98 @@ func TestManagerPublishesRuntimeOutputToHub(t *testing.T) {
 		item.ID,
 		StateStopped,
 	)
+}
+
+func TestManagerPumpFailureTransitionsStreamToError(
+	t *testing.T,
+) {
+	registry := NewMemoryRegistry()
+
+	item := Stream{
+		ID:        "stream-1",
+		Name:      "Camera 1",
+		URL:       "rtsp://localhost:8554/camera-1",
+		State:     StateCreated,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := registry.Create(item); err != nil {
+		t.Fatalf(
+			"create stream: %v",
+			err,
+		)
+	}
+
+	runner := newFakeRunner()
+	runner.output = failingReadCloser{}
+
+	ctx, cancel := context.WithCancel(
+		context.Background(),
+	)
+	defer cancel()
+
+	manager := newTestManager(
+		ctx,
+		registry,
+		runner,
+	)
+
+	startResult := make(chan error, 1)
+
+	go func() {
+		startResult <- manager.Start(item.ID)
+	}()
+
+	<-runner.started
+	close(runner.releaseStart)
+
+	if err := <-startResult; err != nil {
+		t.Fatalf(
+			"start stream: %v",
+			err,
+		)
+	}
+
+	got := waitForState(
+		t,
+		registry,
+		item.ID,
+		StateError,
+	)
+
+	if got.Error != "media stream failed" {
+		t.Fatalf(
+			"expected media failure error %q, got %q",
+			"media stream failed",
+			got.Error,
+		)
+	}
+
+	select {
+	case <-runner.cancelled:
+
+	case <-time.After(time.Second):
+		t.Fatal(
+			"runtime was not cancelled after media failure",
+		)
+	}
+
+	// Allow watchRuntime to finish cleanly.
+	runner.done <- errors.New(
+		"process terminated",
+	)
+
+	final := waitForState(
+		t,
+		registry,
+		item.ID,
+		StateError,
+	)
+
+	if final.Error != "media stream failed" {
+		t.Fatalf(
+			"expected media failure to be preserved, got %q",
+			final.Error,
+		)
+	}
 }

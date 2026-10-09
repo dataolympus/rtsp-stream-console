@@ -71,6 +71,7 @@ func (m *Manager) Start(id string) error {
 	m.mu.Unlock()
 
 	item.State = StateConnecting
+	item.Error = ""
 
 	if err := m.registry.Update(item); err != nil {
 		m.removeActive(id)
@@ -93,6 +94,7 @@ func (m *Manager) Start(id string) error {
 			item.State = StateStopped
 		} else {
 			item.State = StateError
+			item.Error = "stream processor failed to start"
 		}
 
 		if updateErr := m.registry.Update(item); updateErr != nil {
@@ -193,6 +195,7 @@ func (m *Manager) watchRuntime(
 
 	case runtimeErr != nil:
 		item.State = StateError
+		item.Error = "stream source became unavailable"
 
 	default:
 		item.State = StateStopped
@@ -246,6 +249,7 @@ func (m *Manager) pumpRuntime(
 	}
 
 	item.State = StateError
+	item.Error = "media stream failed"
 
 	if updateErr := m.registry.Update(item); updateErr != nil {
 		return

@@ -18,5 +18,6 @@ type Stream struct {
 	Name      string    `json:"name"`
 	URL       string    `json:"url"`
 	State     State     `json:"state"`
+	Error     string    `json:"error,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
