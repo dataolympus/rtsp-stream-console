@@ -8,8 +8,9 @@ import (
 )
 
 var (
-	ErrAlreadyRunning = errors.New("stream is already running")
-	ErrNotRunning     = errors.New("stream is not running")
+	ErrAlreadyRunning           = errors.New("stream is already running")
+	ErrNotRunning               = errors.New("stream is not running")
+	ErrActiveStreamLimitReached = errors.New("active stream limit reached")
 )
 
 type Runtime struct {
@@ -48,13 +49,13 @@ type Runner interface {
 }
 
 type Manager struct {
-	ctx      context.Context
-	registry Registry
-	runner   Runner
-	pump     *MediaPump
-
-	mu     sync.Mutex
-	active map[string]context.CancelFunc
+	ctx              context.Context
+	registry         Registry
+	runner           Runner
+	pump             *MediaPump
+	mu               sync.Mutex
+	active           map[string]context.CancelFunc
+	maxActiveStreams int
 }
 
 func (m *Manager) markLive(
@@ -93,6 +94,23 @@ func NewManager(
 	}
 }
 
+func NewManagerWithMaxActiveStreams(
+	ctx context.Context,
+	registry Registry,
+	runner Runner,
+	pump *MediaPump,
+	maxActiveStreams int,
+) *Manager {
+	return &Manager{
+		ctx:              ctx,
+		registry:         registry,
+		runner:           runner,
+		pump:             pump,
+		active:           make(map[string]context.CancelFunc),
+		maxActiveStreams: maxActiveStreams,
+	}
+}
+
 func (m *Manager) Start(id string) error {
 	item, err := m.registry.Get(id)
 	if err != nil {
@@ -108,6 +126,14 @@ func (m *Manager) Start(id string) error {
 		cancel()
 
 		return ErrAlreadyRunning
+	}
+
+	if m.maxActiveStreams > 0 &&
+		len(m.active) >= m.maxActiveStreams {
+		m.mu.Unlock()
+		cancel()
+
+		return ErrActiveStreamLimitReached
 	}
 
 	m.active[id] = cancel

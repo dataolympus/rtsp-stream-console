@@ -5,6 +5,10 @@ services:
     image: rtsp-stream-console-backend:dev
     environment:
       HTTP_ADDR: ":8080"
+      RTSP_ALLOW_PRIVATE_NETWORKS: "${RTSP_ALLOW_PRIVATE_NETWORKS:-false}"
+      RTSP_ALLOWED_HOSTS: "${RTSP_ALLOWED_HOSTS:-}"
+      MAX_ACTIVE_STREAMS: "${MAX_ACTIVE_STREAMS:-4}"
+      MAX_VIEWERS_PER_STREAM: "${MAX_VIEWERS_PER_STREAM:-8}"
     expose:
       - "8080"
     restart: unless-stopped
@@ -20,7 +24,6 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
-
   frontend:
     build:
       context: ../../frontend
@@ -36,8 +39,8 @@ services:
     image: bluenviron/mediamtx:latest
     profiles:
       - demo
-    ports:
-      - "8554:8554"
+    expose:
+      - "8554"
     restart: unless-stopped
 
   test-camera:

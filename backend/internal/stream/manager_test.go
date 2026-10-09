@@ -43,6 +43,17 @@ func newFakeRunner() *fakeRunner {
 	}
 }
 
+func resetFakeRunnerForNextStart(
+	r *fakeRunner,
+) {
+	r.started = make(chan struct{})
+	r.releaseStart = make(chan struct{})
+	r.done = make(chan error, 1)
+	r.cancelled = make(chan struct{})
+	r.startErr = nil
+	r.output = nil
+}
+
 func newTestManager(
 	ctx context.Context,
 	registry Registry,
@@ -1107,6 +1118,395 @@ func TestManagerRemainsConnectingUntilMediaArrives(
 		t,
 		registry,
 		item.ID,
+		StateStopped,
+	)
+}
+
+func TestManagerRejectsStartWhenActiveStreamLimitReached(
+	t *testing.T,
+) {
+	registry := NewMemoryRegistry()
+
+	first := Stream{
+		ID:        "stream-1",
+		Name:      "Camera 1",
+		URL:       "rtsp://camera.example.com/one",
+		State:     StateCreated,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	second := Stream{
+		ID:        "stream-2",
+		Name:      "Camera 2",
+		URL:       "rtsp://camera.example.com/two",
+		State:     StateCreated,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := registry.Create(first); err != nil {
+		t.Fatalf("create first stream: %v", err)
+	}
+
+	if err := registry.Create(second); err != nil {
+		t.Fatalf("create second stream: %v", err)
+	}
+
+	runner := newFakeRunner()
+
+	ctx, cancel :=
+		context.WithCancel(context.Background())
+	defer cancel()
+
+	hub := NewHub()
+	pump := NewMediaPump(hub)
+
+	manager := NewManagerWithMaxActiveStreams(
+		ctx,
+		registry,
+		runner,
+		pump,
+		1,
+	)
+
+	firstStart := make(chan error, 1)
+
+	go func() {
+		firstStart <- manager.Start(first.ID)
+	}()
+
+	// The first stream has reserved its active runtime
+	// slot and is now waiting inside Runner.Start.
+	<-runner.started
+
+	err := manager.Start(second.ID)
+
+	if !errors.Is(
+		err,
+		ErrActiveStreamLimitReached,
+	) {
+		t.Fatalf(
+			"expected ErrActiveStreamLimitReached, got %v",
+			err,
+		)
+	}
+
+	gotSecond, getErr :=
+		registry.Get(second.ID)
+
+	if getErr != nil {
+		t.Fatalf(
+			"get second stream: %v",
+			getErr,
+		)
+	}
+
+	if gotSecond.State != StateCreated {
+		t.Fatalf(
+			"expected rejected stream to remain %q, got %q",
+			StateCreated,
+			gotSecond.State,
+		)
+	}
+
+	close(runner.releaseStart)
+
+	if err := <-firstStart; err != nil {
+		t.Fatalf(
+			"start first stream: %v",
+			err,
+		)
+	}
+
+	if err := manager.Stop(first.ID); err != nil {
+		t.Fatalf(
+			"stop first stream: %v",
+			err,
+		)
+	}
+
+	runner.done <- context.Canceled
+
+	waitForState(
+		t,
+		registry,
+		first.ID,
+		StateStopped,
+	)
+}
+
+func TestManagerReleasesActiveStreamSlotAfterStop(
+	t *testing.T,
+) {
+	registry := NewMemoryRegistry()
+
+	first := Stream{
+		ID:        "stream-1",
+		Name:      "Camera 1",
+		URL:       "rtsp://camera.example.com/one",
+		State:     StateCreated,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	second := Stream{
+		ID:        "stream-2",
+		Name:      "Camera 2",
+		URL:       "rtsp://camera.example.com/two",
+		State:     StateCreated,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := registry.Create(first); err != nil {
+		t.Fatalf(
+			"create first stream: %v",
+			err,
+		)
+	}
+
+	if err := registry.Create(second); err != nil {
+		t.Fatalf(
+			"create second stream: %v",
+			err,
+		)
+	}
+
+	runner := newFakeRunner()
+
+	ctx, cancel :=
+		context.WithCancel(context.Background())
+	defer cancel()
+
+	hub := NewHub()
+	pump := NewMediaPump(hub)
+
+	manager := NewManagerWithMaxActiveStreams(
+		ctx,
+		registry,
+		runner,
+		pump,
+		1,
+	)
+
+	firstStart := make(chan error, 1)
+
+	go func() {
+		firstStart <- manager.Start(first.ID)
+	}()
+
+	<-runner.started
+
+	close(runner.releaseStart)
+
+	if err := <-firstStart; err != nil {
+		t.Fatalf(
+			"start first stream: %v",
+			err,
+		)
+	}
+
+	if err := manager.Stop(first.ID); err != nil {
+		t.Fatalf(
+			"stop first stream: %v",
+			err,
+		)
+	}
+
+	// Wait for the first runtime's context cancellation
+	// before replacing the fake runner's per-run channels.
+	<-runner.cancelled
+
+	runner.done <- context.Canceled
+
+	waitForState(
+		t,
+		registry,
+		first.ID,
+		StateStopped,
+	)
+
+	resetFakeRunnerForNextStart(
+		runner,
+	)
+
+	secondStart := make(chan error, 1)
+
+	go func() {
+		secondStart <- manager.Start(second.ID)
+	}()
+
+	<-runner.started
+
+	close(runner.releaseStart)
+
+	if err := <-secondStart; err != nil {
+		t.Fatalf(
+			"expected second stream to start after slot release, got %v",
+			err,
+		)
+	}
+
+	if err := manager.Stop(second.ID); err != nil {
+		t.Fatalf(
+			"stop second stream: %v",
+			err,
+		)
+	}
+
+	runner.done <- context.Canceled
+
+	waitForState(
+		t,
+		registry,
+		second.ID,
+		StateStopped,
+	)
+}
+
+func TestManagerReleasesActiveStreamSlotAfterRuntimeFailure(
+	t *testing.T,
+) {
+	registry := NewMemoryRegistry()
+
+	first := Stream{
+		ID:        "stream-1",
+		Name:      "Camera 1",
+		URL:       "rtsp://camera.example.com/one",
+		State:     StateCreated,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	second := Stream{
+		ID:        "stream-2",
+		Name:      "Camera 2",
+		URL:       "rtsp://camera.example.com/two",
+		State:     StateCreated,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := registry.Create(first); err != nil {
+		t.Fatalf(
+			"create first stream: %v",
+			err,
+		)
+	}
+
+	if err := registry.Create(second); err != nil {
+		t.Fatalf(
+			"create second stream: %v",
+			err,
+		)
+	}
+
+	runner := newFakeRunner()
+
+	ctx, cancel :=
+		context.WithCancel(context.Background())
+	defer cancel()
+
+	hub := NewHub()
+	pump := NewMediaPump(hub)
+
+	manager := NewManagerWithMaxActiveStreams(
+		ctx,
+		registry,
+		runner,
+		pump,
+		1,
+	)
+
+	firstStart := make(chan error, 1)
+
+	go func() {
+		firstStart <- manager.Start(first.ID)
+	}()
+
+	<-runner.started
+
+	close(runner.releaseStart)
+
+	if err := <-firstStart; err != nil {
+		t.Fatalf(
+			"start first stream: %v",
+			err,
+		)
+	}
+
+	waitForState(
+		t,
+		registry,
+		first.ID,
+		StateLive,
+	)
+
+	runner.done <- errors.New(
+		"runtime failed",
+	)
+
+	waitForState(
+		t,
+		registry,
+		first.ID,
+		StateError,
+	)
+
+	// Give watchRuntime a deterministic checkpoint:
+	// the failed runtime must no longer consume capacity.
+	deadline := time.Now().Add(time.Second)
+
+	for {
+		manager.mu.Lock()
+		activeCount := len(manager.active)
+		manager.mu.Unlock()
+
+		if activeCount == 0 {
+			break
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatalf(
+				"expected failed runtime slot to be released, got %d active streams",
+				activeCount,
+			)
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	resetFakeRunnerForNextStart(
+		runner,
+	)
+
+	secondStart := make(chan error, 1)
+
+	go func() {
+		secondStart <- manager.Start(second.ID)
+	}()
+
+	<-runner.started
+
+	close(runner.releaseStart)
+
+	if err := <-secondStart; err != nil {
+		t.Fatalf(
+			"expected second stream to start after failure released slot, got %v",
+			err,
+		)
+	}
+
+	if err := manager.Stop(second.ID); err != nil {
+		t.Fatalf(
+			"stop second stream: %v",
+			err,
+		)
+	}
+
+	<-runner.cancelled
+
+	runner.done <- context.Canceled
+
+	waitForState(
+		t,
+		registry,
+		second.ID,
 		StateStopped,
 	)
 }

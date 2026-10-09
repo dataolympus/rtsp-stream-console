@@ -1,12 +1,26 @@
 package stream
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type rejectingRTSPURLPolicy struct {
+	called bool
+}
+
+func (p *rejectingRTSPURLPolicy) Validate(
+	_ context.Context,
+	_ string,
+) error {
+	p.called = true
+
+	return ErrRTSPURLNotAllowed
+}
 
 func TestServiceCreate(t *testing.T) {
 	registry := NewMemoryRegistry()
@@ -149,5 +163,47 @@ func TestServiceCreateRejectsInvalidURL(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestServiceCreateRejectsURLBlockedByPolicy(
+	t *testing.T,
+) {
+	registry := NewMemoryRegistry()
+
+	policy := &rejectingRTSPURLPolicy{}
+
+	service := NewServiceWithURLPolicy(
+		registry,
+		policy,
+	)
+
+	_, err := service.CreateContext(
+		context.Background(),
+		"Internal Camera",
+		"rtsp://10.0.0.10/live",
+	)
+
+	if !errors.Is(
+		err,
+		ErrRTSPURLNotAllowed,
+	) {
+		t.Fatalf(
+			"expected ErrRTSPURLNotAllowed, got %v",
+			err,
+		)
+	}
+
+	if !policy.called {
+		t.Fatal(
+			"expected RTSP URL policy to be called",
+		)
+	}
+
+	if got := registry.List(); len(got) != 0 {
+		t.Fatalf(
+			"expected rejected stream not to be stored, got %d streams",
+			len(got),
+		)
 	}
 }

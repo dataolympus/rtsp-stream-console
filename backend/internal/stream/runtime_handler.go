@@ -49,6 +49,18 @@ func (h *RuntimeHandler) Start(
 			errorResponse{Error: "stream is already running"},
 		)
 
+	case errors.Is(
+		err,
+		ErrActiveStreamLimitReached,
+	):
+		writeJSON(
+			w,
+			http.StatusServiceUnavailable,
+			errorResponse{
+				Error: "stream capacity reached",
+			},
+		)
+
 	default:
 		writeJSON(
 			w,

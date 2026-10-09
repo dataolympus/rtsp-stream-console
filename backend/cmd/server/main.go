@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/api"
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/config"
@@ -32,8 +31,28 @@ func main() {
 
 	streamRegistry := stream.NewMemoryRegistry()
 
+	allowedRTSPHosts := make(
+		map[string]struct{},
+		len(cfg.RTSPAllowedHosts),
+	)
+
+	for _, host := range cfg.RTSPAllowedHosts {
+		allowedRTSPHosts[host] =
+			struct{}{}
+	}
+
+	rtspURLPolicy :=
+		stream.RTSPURLPolicy{
+			AllowedHosts: allowedRTSPHosts,
+
+			AllowPrivateNetworks: cfg.RTSPAllowPrivateNetworks,
+		}
+
 	streamService :=
-		stream.NewService(streamRegistry)
+		stream.NewServiceWithURLPolicy(
+			streamRegistry,
+			rtspURLPolicy,
+		)
 
 	streamHandler :=
 		stream.NewHandler(streamService)
@@ -47,11 +66,12 @@ func main() {
 		stream.NewFFmpegRunner("ffmpeg")
 
 	streamManager :=
-		stream.NewManager(
+		stream.NewManagerWithMaxActiveStreams(
 			appCtx,
 			streamRegistry,
 			streamRunner,
 			streamPump,
+			cfg.MaxActiveStreams,
 		)
 
 	runtimeHandler :=
@@ -60,8 +80,9 @@ func main() {
 		)
 
 	websocketHandler :=
-		stream.NewWebSocketHandler(
+		stream.NewWebSocketHandlerWithMaxViewers(
 			streamHub,
+			cfg.MaxViewersPerStream,
 		)
 
 	server := &http.Server{
@@ -72,8 +93,8 @@ func main() {
 			websocketHandler,
 			runtimeHandler,
 		),
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: cfg.HTTPReadHeaderTimeout,
+		IdleTimeout:       cfg.HTTPIdleTimeout,
 	}
 
 	serverErrors := make(chan error, 1)

@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"context"
 	"errors"
 	"net/url"
 	"strings"
@@ -14,8 +15,16 @@ var (
 	ErrInvalidURL  = errors.New("valid RTSP URL is required")
 )
 
+type RTSPURLValidator interface {
+	Validate(
+		ctx context.Context,
+		rawURL string,
+	) error
+}
+
 type Service struct {
-	registry Registry
+	registry     Registry
+	urlValidator RTSPURLValidator
 }
 
 func NewService(registry Registry) *Service {
@@ -24,7 +33,32 @@ func NewService(registry Registry) *Service {
 	}
 }
 
-func (s *Service) Create(name, rawURL string) (Stream, error) {
+func NewServiceWithURLPolicy(
+	registry Registry,
+	validator RTSPURLValidator,
+) *Service {
+	return &Service{
+		registry:     registry,
+		urlValidator: validator,
+	}
+}
+
+func (s *Service) Create(
+	name,
+	rawURL string,
+) (Stream, error) {
+	return s.CreateContext(
+		context.Background(),
+		name,
+		rawURL,
+	)
+}
+
+func (s *Service) CreateContext(
+	ctx context.Context,
+	name,
+	rawURL string,
+) (Stream, error) {
 	name = strings.TrimSpace(name)
 	rawURL = strings.TrimSpace(rawURL)
 
@@ -39,6 +73,15 @@ func (s *Service) Create(name, rawURL string) (Stream, error) {
 		return Stream{}, ErrInvalidURL
 	}
 
+	if s.urlValidator != nil {
+		if err := s.urlValidator.Validate(
+			ctx,
+			rawURL,
+		); err != nil {
+			return Stream{}, err
+		}
+	}
+
 	created := Stream{
 		ID:        uuid.NewString(),
 		Name:      name,
@@ -47,7 +90,9 @@ func (s *Service) Create(name, rawURL string) (Stream, error) {
 		CreatedAt: time.Now().UTC(),
 	}
 
-	if err := s.registry.Create(created); err != nil {
+	if err := s.registry.Create(
+		created,
+	); err != nil {
 		return Stream{}, err
 	}
 

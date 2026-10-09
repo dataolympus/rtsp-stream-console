@@ -6,6 +6,8 @@ import (
 	"net/http"
 )
 
+const maxCreateStreamBodyBytes int64 = 4 * 1024
+
 type Handler struct {
 	service *Service
 }
@@ -28,33 +30,71 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var request createRequest
 
+	r.Body = http.MaxBytesReader(
+		w,
+		r.Body,
+		maxCreateStreamBodyBytes,
+	)
+
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&request); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{
-			Error: "invalid request body",
-		})
+		var maxBytesError *http.MaxBytesError
+
+		if errors.As(
+			err,
+			&maxBytesError,
+		) {
+			writeJSON(
+				w,
+				http.StatusRequestEntityTooLarge,
+				errorResponse{
+					Error: "request body too large",
+				},
+			)
+
+			return
+		}
+
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			errorResponse{
+				Error: "invalid request body",
+			},
+		)
+
 		return
 	}
 
-	created, err := h.service.Create(
+	created, err := h.service.CreateContext(
+		r.Context(),
 		request.Name,
 		request.URL,
 	)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidName),
-			errors.Is(err, ErrInvalidURL):
+			errors.Is(err, ErrInvalidURL),
+			errors.Is(err, ErrRTSPURLNotAllowed):
 
-			writeJSON(w, http.StatusBadRequest, errorResponse{
-				Error: err.Error(),
-			})
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				errorResponse{
+					Error: err.Error(),
+				},
+			)
 
 		default:
-			writeJSON(w, http.StatusInternalServerError, errorResponse{
-				Error: "internal server error",
-			})
+			writeJSON(
+				w,
+				http.StatusInternalServerError,
+				errorResponse{
+					Error: "internal server error",
+				},
+			)
 		}
 
 		return

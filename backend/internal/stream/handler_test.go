@@ -343,3 +343,121 @@ func TestHandlerDeleteStreamNotFound(t *testing.T) {
 		)
 	}
 }
+
+func TestHandlerCreateRejectsBlockedRTSPURL(
+	t *testing.T,
+) {
+	registry := NewMemoryRegistry()
+
+	policy := &rejectingRTSPURLPolicy{}
+
+	service := NewServiceWithURLPolicy(
+		registry,
+		policy,
+	)
+
+	handler := NewHandler(service)
+
+	body := `{
+		"name": "Internal Camera",
+		"url": "rtsp://10.0.0.10/live"
+	}`
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/streams",
+		strings.NewReader(body),
+	)
+
+	request.Header.Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	response := httptest.NewRecorder()
+
+	handler.Create(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			response.Code,
+		)
+	}
+
+	if !strings.Contains(
+		response.Body.String(),
+		ErrRTSPURLNotAllowed.Error(),
+	) {
+		t.Fatalf(
+			"unexpected response body: %s",
+			response.Body.String(),
+		)
+	}
+
+	if got := registry.List(); len(got) != 0 {
+		t.Fatalf(
+			"expected rejected stream not to be stored, got %d streams",
+			len(got),
+		)
+	}
+}
+
+func TestHandlerCreateRejectsOversizedRequestBody(
+	t *testing.T,
+) {
+	registry := NewMemoryRegistry()
+	service := NewService(registry)
+	handler := NewHandler(service)
+
+	body := `{"name":"` +
+		strings.Repeat("a", 5000) +
+		`","url":"rtsp://camera.example.com/live"}`
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/streams",
+		strings.NewReader(body),
+	)
+
+	request.Header.Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	response := httptest.NewRecorder()
+
+	handler.Create(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusRequestEntityTooLarge,
+			response.Code,
+		)
+	}
+
+	if !strings.Contains(
+		response.Body.String(),
+		"request body too large",
+	) {
+		t.Fatalf(
+			"unexpected response body: %s",
+			response.Body.String(),
+		)
+	}
+
+	if got := registry.List(); len(got) != 0 {
+		t.Fatalf(
+			"expected oversized request not to be stored, got %d streams",
+			len(got),
+		)
+	}
+}

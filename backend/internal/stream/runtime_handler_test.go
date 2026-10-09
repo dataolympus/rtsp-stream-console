@@ -3,6 +3,7 @@ package stream
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -187,6 +188,53 @@ func TestRuntimeHandlerStopNotFound(t *testing.T) {
 			"expected status %d, got %d",
 			http.StatusNotFound,
 			response.Code,
+		)
+	}
+}
+
+func TestRuntimeHandlerStartActiveStreamLimitReached(
+	t *testing.T,
+) {
+	controller := &fakeRuntimeController{
+		startErr: ErrActiveStreamLimitReached,
+	}
+
+	handler := NewRuntimeHandler(controller)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/streams/stream-2/start",
+		nil,
+	)
+
+	request.SetPathValue(
+		"id",
+		"stream-2",
+	)
+
+	response := httptest.NewRecorder()
+
+	handler.Start(
+		response,
+		request,
+	)
+
+	if response.Code !=
+		http.StatusServiceUnavailable {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusServiceUnavailable,
+			response.Code,
+		)
+	}
+
+	if !strings.Contains(
+		response.Body.String(),
+		"stream capacity reached",
+	) {
+		t.Fatalf(
+			"unexpected response body: %s",
+			response.Body.String(),
 		)
 	}
 }
