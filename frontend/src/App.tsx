@@ -5,6 +5,8 @@ import {
 import type { FormEvent } from 'react';
 
 import {
+  Alert,
+  AlertVariant,
   Button,
   Card,
   CardBody,
@@ -40,13 +42,38 @@ type Stream = {
   | 'stopped'
   | 'error';
   createdAt: string;
+  error?: string;
 };
+
+const STREAM_RECONCILE_MS = 2000;
 
 function App() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [streams, setStreams] = useState<Stream[]>([]);
+
+  const [streamActionErrors, setStreamActionErrors] =
+    useState<Record<string, string>>({});
+
+  const clearStreamActionError = (streamId: string) => {
+    setStreamActionErrors((current) => {
+      const next = { ...current };
+      delete next[streamId];
+
+      return next;
+    });
+  };
+
+  const setStreamActionError = (
+    streamId: string,
+    message: string,
+  ) => {
+    setStreamActionErrors((current) => ({
+      ...current,
+      [streamId]: message,
+    }));
+  };
 
   useEffect(() => {
     const loadStreams = async () => {
@@ -119,6 +146,25 @@ function App() {
     );
   };
 
+  const refreshStream = async (
+    id: string,
+  ): Promise<Stream | null> => {
+    const response = await fetch(
+      `/api/v1/streams/${id}`,
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const updated =
+      (await response.json()) as Stream;
+
+    replaceStream(updated);
+
+    return updated;
+  };
+
   const refreshStreamUntilSettled = async (
     id: string,
   ) => {
@@ -130,18 +176,12 @@ function App() {
       attempt < maxAttempts;
       attempt += 1
     ) {
-      const response = await fetch(
-        `/api/v1/streams/${id}`,
-      );
+      const updated =
+        await refreshStream(id);
 
-      if (!response.ok) {
+      if (!updated) {
         return;
       }
-
-      const updated =
-        (await response.json()) as Stream;
-
-      replaceStream(updated);
 
       const isTransitional =
         updated.state === 'connecting' ||
@@ -160,23 +200,65 @@ function App() {
     }
   };
 
-  const startStream = async (
-    stream: Stream,
-  ) => {
-    const response = await fetch(
-      `/api/v1/streams/${stream.id}/start`,
-      {
-        method: 'POST',
-      },
-    );
+  useEffect(() => {
+    const streamIdsToRefresh = streams
+      .filter(
+        (stream) =>
+          stream.state === 'connecting' ||
+          stream.state === 'live' ||
+          stream.state === 'stopping',
+      )
+      .map((stream) => stream.id);
 
-    if (!response.ok) {
+    if (streamIdsToRefresh.length === 0) {
       return;
     }
 
-    await refreshStreamUntilSettled(
-      stream.id,
-    );
+    const intervalId = window.setInterval(() => {
+      for (const streamId of streamIdsToRefresh) {
+        void refreshStream(streamId).catch(() => {
+          // Preserve the last known state if a
+          // background reconciliation request fails.
+        });
+      }
+    }, STREAM_RECONCILE_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [streams]);
+
+  const startStream = async (
+    stream: Stream,
+  ) => {
+    clearStreamActionError(stream.id);
+
+    try {
+      const response = await fetch(
+        `/api/v1/streams/${stream.id}/start`,
+        {
+          method: 'POST',
+        },
+      );
+
+      if (!response.ok) {
+        setStreamActionError(
+          stream.id,
+          `Unable to start ${stream.name}. Please try again.`,
+        );
+
+        return;
+      }
+
+      await refreshStreamUntilSettled(
+        stream.id,
+      );
+    } catch {
+      setStreamActionError(
+        stream.id,
+        `Unable to start ${stream.name}. Please try again.`,
+      );
+    }
   };
 
   const stopStream = async (
@@ -243,6 +325,22 @@ function App() {
                   <Label>
                     {stream.state}
                   </Label>
+
+                  {stream.state === 'error' && stream.error && (
+                    <Alert
+                      variant={AlertVariant.danger}
+                      isInline
+                      title={stream.error}
+                    />
+                  )}
+
+                  {streamActionErrors[stream.id] && (
+                    <Alert
+                      variant={AlertVariant.danger}
+                      isInline
+                      title={streamActionErrors[stream.id]}
+                    />
+                  )}
 
                   {(
                     stream.state === 'created' ||

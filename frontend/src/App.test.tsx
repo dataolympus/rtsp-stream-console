@@ -1,4 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import {
+    act,
+    render,
+    screen,
+    waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
     beforeEach,
@@ -388,5 +393,370 @@ describe('App', () => {
                 name: /stop camera 2/i,
             }),
         ).toBeInTheDocument();
+    });
+
+    it('shows a stream failure and allows retry', async () => {
+        fetchMock
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [
+                    {
+                        id: 'stream-1',
+                        name: 'Unreachable Camera',
+                        url: 'rtsp://127.0.0.1:65534/missing',
+                        state: 'error',
+                        error: 'stream source became unavailable',
+                        createdAt: '2026-10-09T00:00:00Z',
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 202,
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    id: 'stream-1',
+                    name: 'Unreachable Camera',
+                    url: 'rtsp://127.0.0.1:65534/missing',
+                    state: 'connecting',
+                    createdAt: '2026-10-09T00:00:00Z',
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    id: 'stream-1',
+                    name: 'Unreachable Camera',
+                    url: 'rtsp://127.0.0.1:65534/missing',
+                    state: 'live',
+                    createdAt: '2026-10-09T00:00:00Z',
+                }),
+            });
+
+        render(<App />);
+
+        expect(
+            await screen.findByText(
+                'stream source became unavailable',
+            ),
+        ).toBeInTheDocument();
+
+        const retryButton = screen.getByRole(
+            'button',
+            {
+                name: /start unreachable camera/i,
+            },
+        );
+
+        await userEvent.click(retryButton);
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/v1/streams/stream-1/start',
+            expect.objectContaining({
+                method: 'POST',
+            }),
+        );
+
+        await waitFor(() => {
+            expect(
+                screen.queryByText(
+                    'stream source became unavailable',
+                ),
+            ).not.toBeInTheDocument();
+        });
+
+        expect(
+            await screen.findByText('live'),
+        ).toBeInTheDocument();
+    });
+
+    it('shows an API error when starting a stream fails', async () => {
+        const user = userEvent.setup();
+
+        fetchMock
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [
+                    {
+                        id: 'stream-1',
+                        name: 'Camera 1',
+                        url: 'rtsp://localhost:8554/camera-1',
+                        state: 'created',
+                        createdAt: '2026-10-09T00:00:00Z',
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({
+                ok: false,
+                status: 500,
+            });
+
+        render(<App />);
+
+        const startButton =
+            await screen.findByRole(
+                'button',
+                {
+                    name: /start camera 1/i,
+                },
+            );
+
+        await user.click(startButton);
+
+        expect(
+            await screen.findByText(
+                'Unable to start Camera 1. Please try again.',
+            ),
+        ).toBeInTheDocument();
+
+        expect(
+            screen.getByText('created'),
+        ).toBeInTheDocument();
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('shows an API error when the backend is unavailable', async () => {
+        const user = userEvent.setup();
+
+        fetchMock
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [
+                    {
+                        id: 'stream-1',
+                        name: 'Camera 1',
+                        url: 'rtsp://localhost:8554/camera-1',
+                        state: 'created',
+                        createdAt: '2026-10-09T00:00:00Z',
+                    },
+                ],
+            })
+            .mockRejectedValueOnce(
+                new TypeError('Failed to fetch'),
+            );
+
+        render(<App />);
+
+        await user.click(
+            await screen.findByRole(
+                'button',
+                {
+                    name: /start camera 1/i,
+                },
+            ),
+        );
+
+        expect(
+            await screen.findByText(
+                'Unable to start Camera 1. Please try again.',
+            ),
+        ).toBeInTheDocument();
+
+        expect(
+            screen.getByText('created'),
+        ).toBeInTheDocument();
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('updates a live stream when the runtime later fails', async () => {
+        vi.useFakeTimers();
+
+        try {
+            fetchMock
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    json: async () => [
+                        {
+                            id: 'stream-1',
+                            name: 'Camera 1',
+                            url: 'rtsp://localhost:8554/camera-1',
+                            state: 'live',
+                            createdAt: '2026-10-09T00:00:00Z',
+                        },
+                    ],
+                })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        id: 'stream-1',
+                        name: 'Camera 1',
+                        url: 'rtsp://localhost:8554/camera-1',
+                        state: 'error',
+                        error: 'stream source became unavailable',
+                        createdAt: '2026-10-09T00:00:00Z',
+                    }),
+                });
+
+            render(<App />);
+
+            // Flush the initial GET /streams promise and React update.
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            expect(
+                screen.getByText('live'),
+            ).toBeInTheDocument();
+
+            expect(
+                screen.getByLabelText(
+                    /camera 1 player/i,
+                ),
+            ).toBeInTheDocument();
+
+            // Advance the future live-state reconciliation interval.
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(2000);
+            });
+
+            expect(
+                screen.getByText(
+                    'stream source became unavailable',
+                ),
+            ).toBeInTheDocument();
+
+            expect(
+                screen.queryByLabelText(
+                    /camera 1 player/i,
+                ),
+            ).not.toBeInTheDocument();
+
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('updates a connecting stream when it becomes live', async () => {
+        vi.useFakeTimers();
+
+        try {
+            fetchMock
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    json: async () => [
+                        {
+                            id: 'stream-1',
+                            name: 'Camera 1',
+                            url: 'rtsp://localhost:8554/camera-1',
+                            state: 'connecting',
+                            createdAt: '2026-10-09T00:00:00Z',
+                        },
+                    ],
+                })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        id: 'stream-1',
+                        name: 'Camera 1',
+                        url: 'rtsp://localhost:8554/camera-1',
+                        state: 'live',
+                        createdAt: '2026-10-09T00:00:00Z',
+                    }),
+                });
+
+            render(<App />);
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            expect(
+                screen.getByText('connecting'),
+            ).toBeInTheDocument();
+
+            expect(
+                screen.queryByLabelText(
+                    /camera 1 player/i,
+                ),
+            ).not.toBeInTheDocument();
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(2000);
+            });
+
+            expect(
+                screen.getByText('live'),
+            ).toBeInTheDocument();
+
+            expect(
+                screen.getByLabelText(
+                    /camera 1 player/i,
+                ),
+            ).toBeInTheDocument();
+
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('reconciles a connecting stream with one request per interval', async () => {
+        vi.useFakeTimers();
+
+        try {
+            fetchMock
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    json: async () => [
+                        {
+                            id: 'stream-1',
+                            name: 'Camera 1',
+                            url: 'rtsp://localhost:8554/camera-1',
+                            state: 'connecting',
+                            createdAt: '2026-10-09T00:00:00Z',
+                        },
+                    ],
+                })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        id: 'stream-1',
+                        name: 'Camera 1',
+                        url: 'rtsp://localhost:8554/camera-1',
+                        state: 'connecting',
+                        createdAt: '2026-10-09T00:00:00Z',
+                    }),
+                });
+
+            render(<App />);
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            expect(
+                screen.getByText('connecting'),
+            ).toBeInTheDocument();
+
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(2000);
+            });
+
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+
+            expect(
+                screen.getByText('connecting'),
+            ).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
