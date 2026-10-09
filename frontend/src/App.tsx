@@ -103,6 +103,97 @@ function App() {
     closeAddStream();
   };
 
+  const replaceStream = (
+    updated: Stream,
+  ) => {
+    setStreams((current) =>
+      current.map((stream) =>
+        stream.id === updated.id
+          ? updated
+          : stream,
+      ),
+    );
+  };
+
+  const refreshStreamUntilSettled = async (
+    id: string,
+  ) => {
+    const maxAttempts = 40;
+    const pollIntervalMs = 250;
+
+    for (
+      let attempt = 0;
+      attempt < maxAttempts;
+      attempt += 1
+    ) {
+      const response = await fetch(
+        `/api/v1/streams/${id}`,
+      );
+
+      if (!response.ok) {
+        return;
+      }
+
+      const updated =
+        (await response.json()) as Stream;
+
+      replaceStream(updated);
+
+      const isTransitional =
+        updated.state === 'connecting' ||
+        updated.state === 'stopping';
+
+      if (!isTransitional) {
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        setTimeout(
+          resolve,
+          pollIntervalMs,
+        );
+      });
+    }
+  };
+
+  const startStream = async (
+    stream: Stream,
+  ) => {
+    const response = await fetch(
+      `/api/v1/streams/${stream.id}/start`,
+      {
+        method: 'POST',
+      },
+    );
+
+    if (!response.ok) {
+      return;
+    }
+
+    await refreshStreamUntilSettled(
+      stream.id,
+    );
+  };
+
+  const stopStream = async (
+    stream: Stream,
+  ) => {
+    const response = await fetch(
+      `/api/v1/streams/${stream.id}/stop`,
+      {
+        method: 'POST',
+      },
+    );
+
+    if (!response.ok) {
+      return;
+    }
+
+    await refreshStreamUntilSettled(
+      stream.id,
+    );
+  };
+
   return (
     <Page>
       <PageSection>
@@ -133,6 +224,46 @@ function App() {
               <Label>
                 {stream.state}
               </Label>
+
+              {(
+                stream.state === 'created' ||
+                stream.state === 'stopped' ||
+                stream.state === 'error'
+              ) && (
+                  <Button
+                    variant="primary"
+                    aria-label={`Start ${stream.name}`}
+                    onClick={() => {
+                      void startStream(stream);
+                    }}
+                  >
+                    Start
+                  </Button>
+                )}
+
+              {(
+                stream.state === 'live' ||
+                stream.state === 'connecting'
+              ) && (
+                  <Button
+                    variant="secondary"
+                    aria-label={`Stop ${stream.name}`}
+                    onClick={() => {
+                      void stopStream(stream);
+                    }}
+                  >
+                    Stop
+                  </Button>
+                )}
+
+              {stream.state === 'stopping' && (
+                <Button
+                  variant="secondary"
+                  isDisabled
+                >
+                  Stopping
+                </Button>
+              )}
             </CardBody>
           </Card>
         ))}

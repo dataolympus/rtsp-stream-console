@@ -176,4 +176,128 @@ describe('App', () => {
             '/api/v1/streams',
         );
     });
+
+    it('starts a stream and refreshes its state', async () => {
+        const user = userEvent.setup();
+
+        const createdStream = {
+            id: 'stream-1',
+            name: 'Camera 1',
+            url: 'rtsp://localhost:8554/camera-1',
+            state: 'created',
+            createdAt: '2026-10-09T00:00:00Z',
+        };
+
+        const liveStream = {
+            ...createdStream,
+            state: 'live',
+        };
+
+        fetchMock
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [createdStream],
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 202,
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    ...createdStream,
+                    state: 'connecting',
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => liveStream,
+            });
+
+        render(<App />);
+
+        await screen.findByText('Camera 1');
+
+        await user.click(
+            screen.getByRole('button', {
+                name: /start camera 1/i,
+            }),
+        );
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/v1/streams/stream-1/start',
+            expect.objectContaining({
+                method: 'POST',
+            }),
+        );
+
+        expect(
+            await screen.findByText('live'),
+        ).toBeInTheDocument();
+    });
+
+    it('stops a live stream and refreshes its state', async () => {
+        const user = userEvent.setup();
+
+        const liveStream = {
+            id: 'stream-1',
+            name: 'Camera 1',
+            url: 'rtsp://localhost:8554/camera-1',
+            state: 'live',
+            createdAt: '2026-10-09T00:00:00Z',
+        };
+
+        const stoppedStream = {
+            ...liveStream,
+            state: 'stopped',
+        };
+
+        fetchMock
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => [liveStream],
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 202,
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    ...liveStream,
+                    state: 'stopping',
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => stoppedStream,
+            });
+
+        render(<App />);
+
+        await screen.findByText('Camera 1');
+
+        await user.click(
+            screen.getByRole('button', {
+                name: /stop camera 1/i,
+            }),
+        );
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/v1/streams/stream-1/stop',
+            expect.objectContaining({
+                method: 'POST',
+            }),
+        );
+
+        expect(
+            await screen.findByText('stopped'),
+        ).toBeInTheDocument();
+    });
 });
