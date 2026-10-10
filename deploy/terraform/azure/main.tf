@@ -125,3 +125,49 @@ resource "azurerm_network_interface" "main" {
 
   tags = local.common_tags
 }
+
+resource "azurerm_linux_virtual_machine" "main" {
+  name                = "vm-${local.name_prefix}"
+  computer_name       = "rtsp-stream"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  size                = var.vm_size
+
+  admin_username                  = var.admin_username
+  disable_password_authentication = true
+
+  network_interface_ids = [
+    azurerm_network_interface.main.id,
+  ]
+
+  admin_ssh_key {
+    username = var.admin_username
+
+    public_key = file(
+      pathexpand(var.ssh_public_key_path)
+    )
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "StandardSSD_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
+
+  custom_data = base64encode(
+    templatefile(
+      "${path.module}/cloud-init.yaml.tftpl",
+      {
+        admin_username = var.admin_username
+      }
+    )
+  )
+
+  tags = local.common_tags
+}
