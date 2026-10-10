@@ -303,15 +303,15 @@ function App() {
             <GridItem
               key={stream.id}
               span={12}
-              md={6}
+              lg={6}
               xl={4}
             >
-              <Card isFullHeight>
+              <Card className="stream-card">
                 <CardTitle>
                   {stream.name}
                 </CardTitle>
 
-                <CardBody>
+                <CardBody className="stream-card__body">
                   {stream.state === 'live' && (
                     <StreamPlayer
                       streamId={stream.id}
@@ -320,11 +320,12 @@ function App() {
                     />
                   )}
 
-                  <div>{stream.url}</div>
-
-                  <Label>
-                    {stream.state}
-                  </Label>
+                  <div
+                    className="stream-card__url"
+                    title={stream.url}
+                  >
+                    {stream.url}
+                  </div>
 
                   {stream.state === 'error' && stream.error && (
                     <Alert
@@ -342,45 +343,51 @@ function App() {
                     />
                   )}
 
-                  {(
-                    stream.state === 'created' ||
-                    stream.state === 'stopped' ||
-                    stream.state === 'error'
-                  ) && (
-                      <Button
-                        variant="primary"
-                        aria-label={`Start ${stream.name}`}
-                        onClick={() => {
-                          void startStream(stream);
-                        }}
-                      >
-                        Start
-                      </Button>
-                    )}
+                  <div className="stream-card__controls">
+                    <Label>
+                      {stream.state}
+                    </Label>
 
-                  {(
-                    stream.state === 'live' ||
-                    stream.state === 'connecting'
-                  ) && (
+                    {(
+                      stream.state === 'created' ||
+                      stream.state === 'stopped' ||
+                      stream.state === 'error'
+                    ) && (
+                        <Button
+                          variant="primary"
+                          aria-label={`Start ${stream.name}`}
+                          onClick={() => {
+                            void startStream(stream);
+                          }}
+                        >
+                          Start
+                        </Button>
+                      )}
+
+                    {(
+                      stream.state === 'live' ||
+                      stream.state === 'connecting'
+                    ) && (
+                        <Button
+                          variant="secondary"
+                          aria-label={`Stop ${stream.name}`}
+                          onClick={() => {
+                            void stopStream(stream);
+                          }}
+                        >
+                          Stop
+                        </Button>
+                      )}
+
+                    {stream.state === 'stopping' && (
                       <Button
                         variant="secondary"
-                        aria-label={`Stop ${stream.name}`}
-                        onClick={() => {
-                          void stopStream(stream);
-                        }}
+                        isDisabled
                       >
-                        Stop
+                        Stopping
                       </Button>
                     )}
-
-                  {stream.state === 'stopping' && (
-                    <Button
-                      variant="secondary"
-                      isDisabled
-                    >
-                      Stopping
-                    </Button>
-                  )}
+                  </div>
                 </CardBody>
               </Card>
             </GridItem>

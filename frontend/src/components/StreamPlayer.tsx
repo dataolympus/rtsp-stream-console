@@ -90,18 +90,13 @@ function StreamPlayer({
     ]);
 
     return (
-        <>
+        <div className="stream-player">
             <video
                 ref={videoRef}
                 aria-label={`${streamName} player`}
+                className="stream-player__video"
                 muted
                 playsInline
-                style={{
-                    width: '100%',
-                    aspectRatio: '16 / 9',
-                    background: '#000',
-                    objectFit: 'contain',
-                }}
             />
 
             {isLive && (
@@ -123,7 +118,7 @@ function StreamPlayer({
                         : 'Play'}
                 </Button>
             )}
-        </>
+        </div>
     );
 }
 
