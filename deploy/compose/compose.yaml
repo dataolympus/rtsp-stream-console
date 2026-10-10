@@ -11,6 +11,9 @@ services:
       MAX_VIEWERS_PER_STREAM: "${MAX_VIEWERS_PER_STREAM:-8}"
       EXPENSIVE_REQUESTS_PER_MINUTE: "${EXPENSIVE_REQUESTS_PER_MINUTE:-10}"
       TRUST_PROXY_HEADERS: "${TRUST_PROXY_HEADERS:-true}"
+    cpus: "${BACKEND_CPUS:-2.0}"
+    mem_limit: "${BACKEND_MEMORY_LIMIT:-1g}"
+    pids_limit: ${BACKEND_PIDS_LIMIT:-128}
     expose:
       - "8080"
     restart: unless-stopped
