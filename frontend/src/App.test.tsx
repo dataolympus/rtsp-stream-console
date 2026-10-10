@@ -759,4 +759,41 @@ describe('App', () => {
             vi.useRealTimers();
         }
     });
+
+    it('shows an empty state when no streams exist', async () => {
+        const user = userEvent.setup();
+
+        render(<App />);
+
+        expect(
+            await screen.findByRole('heading', {
+                name: /no streams yet/i,
+            }),
+        ).toBeInTheDocument();
+
+        expect(
+            screen.getByText(
+                /add an rtsp source to begin monitoring video/i,
+            ),
+        ).toBeInTheDocument();
+
+        expect(
+            screen.getByRole('button', {
+                name: /^add stream$/i,
+            }),
+        ).toBeInTheDocument();
+
+        const emptyStateAction =
+            screen.getByRole('button', {
+                name: /add first stream/i,
+            });
+
+        expect(emptyStateAction).toBeInTheDocument();
+
+        await user.click(emptyStateAction);
+
+        expect(
+            screen.getByRole('dialog'),
+        ).toBeInTheDocument();
+    });
 });

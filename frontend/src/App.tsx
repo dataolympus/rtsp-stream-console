@@ -11,6 +11,10 @@ import {
   Card,
   CardBody,
   CardTitle,
+  EmptyState,
+  EmptyStateActions,
+  EmptyStateBody,
+  EmptyStateFooter,
   Form,
   FormGroup,
   Grid,
@@ -303,102 +307,124 @@ function App() {
         </div>
       </PageSection>
 
-      <PageSection>
-        <Grid hasGutter>
-          {streams.map((stream) => (
-            <GridItem
-              key={stream.id}
-              span={12}
-              lg={6}
-              xl={4}
-            >
-              <Card className="stream-card">
-                <CardTitle>
-                  {stream.name}
-                </CardTitle>
+      <PageSection className="console-streams">
+        {streams.length === 0 ? (
+          <EmptyState
+            titleText="No streams yet"
+            headingLevel="h2"
+          >
+            <EmptyStateBody>
+              Add an RTSP source to begin monitoring video.
+            </EmptyStateBody>
 
-                <CardBody className="stream-card__body">
-                  {stream.state === 'live' && (
-                    <StreamPlayer
-                      streamId={stream.id}
-                      streamName={stream.name}
-                      isLive
-                    />
-                  )}
+            <EmptyStateFooter>
+              <EmptyStateActions>
+                <Button
+                  variant="primary"
+                  onClick={() => setIsAddOpen(true)}
+                >
+                  Add first stream
+                </Button>
+              </EmptyStateActions>
+            </EmptyStateFooter>
+          </EmptyState>
+        ) : (
+          <Grid hasGutter>
+            {streams.map((stream) => (
+              <GridItem
+                key={stream.id}
+                span={12}
+                lg={6}
+                xl={4}
+              >
+                <Card className="stream-card">
+                  <CardTitle>
+                    {stream.name}
+                  </CardTitle>
 
-                  <div
-                    className="stream-card__url"
-                    title={stream.url}
-                  >
-                    {stream.url}
-                  </div>
+                  <CardBody className="stream-card__body">
+                    {stream.state === 'live' && (
+                      <StreamPlayer
+                        streamId={stream.id}
+                        streamName={stream.name}
+                        isLive
+                      />
+                    )}
 
-                  {stream.state === 'error' && stream.error && (
-                    <Alert
-                      variant={AlertVariant.danger}
-                      isInline
-                      title={stream.error}
-                    />
-                  )}
+                    <div
+                      className="stream-card__url"
+                      title={stream.url}
+                    >
+                      {stream.url}
+                    </div>
 
-                  {streamActionErrors[stream.id] && (
-                    <Alert
-                      variant={AlertVariant.danger}
-                      isInline
-                      title={streamActionErrors[stream.id]}
-                    />
-                  )}
+                    {stream.state === 'error' && stream.error && (
+                      <Alert
+                        variant={AlertVariant.danger}
+                        isInline
+                        title={stream.error}
+                      />
+                    )}
 
-                  <div className="stream-card__controls">
-                    <Label>
-                      {stream.state}
-                    </Label>
+                    {streamActionErrors[stream.id] && (
+                      <Alert
+                        variant={AlertVariant.danger}
+                        isInline
+                        title={streamActionErrors[stream.id]}
+                      />
+                    )}
 
-                    {(
-                      stream.state === 'created' ||
-                      stream.state === 'stopped' ||
-                      stream.state === 'error'
-                    ) && (
-                        <Button
-                          variant="primary"
-                          aria-label={`Start ${stream.name}`}
-                          onClick={() => {
-                            void startStream(stream);
-                          }}
-                        >
-                          Start
-                        </Button>
-                      )}
+                    <div className="stream-card__controls">
+                      <Label>
+                        {stream.state}
+                      </Label>
 
-                    {(
-                      stream.state === 'live' ||
-                      stream.state === 'connecting'
-                    ) && (
+                      {(
+                        stream.state === 'created' ||
+                        stream.state === 'stopped' ||
+                        stream.state === 'error'
+                      ) && (
+                          <Button
+                            variant="primary"
+                            aria-label={`Start ${stream.name}`}
+                            onClick={() => {
+                              void startStream(stream);
+                            }}
+                          >
+                            Start
+                          </Button>
+                        )}
+
+                      {(
+                        stream.state === 'live' ||
+                        stream.state === 'connecting'
+                      ) && (
+                          <Button
+                            variant="secondary"
+                            aria-label={`Stop ${stream.name}`}
+                            onClick={() => {
+                              void stopStream(stream);
+                            }}
+                          >
+                            Stop
+                          </Button>
+                        )}
+
+                      {stream.state === 'stopping' && (
                         <Button
                           variant="secondary"
-                          aria-label={`Stop ${stream.name}`}
-                          onClick={() => {
-                            void stopStream(stream);
-                          }}
+                          isDisabled
                         >
-                          Stop
+                          Stopping
                         </Button>
                       )}
-
-                    {stream.state === 'stopping' && (
-                      <Button
-                        variant="secondary"
-                        isDisabled
-                      >
-                        Stopping
-                      </Button>
-                    )}
-                  </div>
-                </CardBody>
-              </Card>
-            </GridItem>
-          ))}
-        </Grid>
+                    </div>
+                  </CardBody>
+                </Card>
+              </GridItem>
+            ))}
+          </Grid>
+        )}
       </PageSection>
 
       <Modal
