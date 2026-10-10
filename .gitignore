@@ -2,6 +2,13 @@
 .env
 .env.*
 !.env.example
+deploy/compose/prod.env
+
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
 
 # Frontend
 frontend/node_modules/

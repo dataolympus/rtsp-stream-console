@@ -1,0 +1,27 @@
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	handle /healthz {
+		reverse_proxy backend:8080
+	}
+
+	handle /readyz {
+		reverse_proxy backend:8080
+	}
+
+	handle {
+		basic_auth {
+			{$DEMO_USERNAME} {$DEMO_PASSWORD_HASH}
+		}
+
+		handle /api/* {
+			reverse_proxy backend:8080
+		}
+
+		handle {
+			root * /srv
+			try_files {path} /index.html
+			file_server
+		}
+	}
+}

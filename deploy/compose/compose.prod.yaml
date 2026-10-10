@@ -1,0 +1,27 @@
+services:
+  backend:
+    environment:
+      MAX_ACTIVE_STREAMS: "${MAX_ACTIVE_STREAMS:-2}"
+      MAX_VIEWERS_PER_STREAM: "${MAX_VIEWERS_PER_STREAM:-4}"
+      EXPENSIVE_REQUESTS_PER_MINUTE: "${EXPENSIVE_REQUESTS_PER_MINUTE:-10}"
+      TRUST_PROXY_HEADERS: "true"
+
+  frontend:
+    environment:
+      SITE_ADDRESS: "${SITE_ADDRESS}"
+      DEMO_USERNAME: "${DEMO_USERNAME}"
+      DEMO_PASSWORD_HASH: "${DEMO_PASSWORD_HASH}"
+
+    ports:
+      - "${PUBLIC_HTTP_PORT:-80}:80"
+      - "${PUBLIC_HTTPS_PORT:-443}:443"
+      - "${PUBLIC_HTTPS_PORT:-443}:443/udp"
+
+    volumes:
+      - ../../frontend/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
