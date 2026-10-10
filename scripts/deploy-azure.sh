@@ -14,6 +14,7 @@ USERNAME="reviewer"
 ENABLE_DEMO=false
 REUSE_ENV=false
 NO_BUILD=false
+RELEASE_TAG=""
 
 usage() {
   cat <<'EOF'
@@ -27,6 +28,7 @@ Options:
   --demo                Enable MediaMTX and the synthetic RTSP camera
   --reuse-env           Reuse the existing production environment on the VM
   --no-build            Reuse existing images instead of rebuilding them
+  --release <tag>       Deploy published GHCR images with this tag
   -h, --help            Show this help
 
 Examples:
@@ -68,6 +70,10 @@ while [[ $# -gt 0 ]]; do
       NO_BUILD=true
       shift
       ;;
+    --release)
+      RELEASE_TAG="${2:?missing value for --release}"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -88,6 +94,10 @@ fi
 if [[ "${REUSE_ENV}" == false && -z "${SITE_ADDRESS}" ]]; then
   echo "--site is required unless --reuse-env is used" >&2
   exit 1
+fi
+
+if [[ -n "${RELEASE_TAG}" ]]; then
+  echo "Release images:     ${RELEASE_TAG}"
 fi
 
 command -v terraform >/dev/null 2>&1 || {
@@ -205,6 +215,11 @@ fi
 
 if [[ "${NO_BUILD}" == true ]]; then
   DEPLOY_COMMAND+=" --no-build"
+fi
+
+if [[ -n "${RELEASE_TAG}" ]]; then
+  printf -v RELEASE_Q '%q' "${RELEASE_TAG}"
+  DEPLOY_COMMAND+=" --release ${RELEASE_Q}"
 fi
 
 echo

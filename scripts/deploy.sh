@@ -10,6 +10,7 @@ USERNAME="reviewer"
 ENABLE_DEMO=false
 REUSE_ENV=false
 BUILD_IMAGES=true
+RELEASE_TAG=""
 
 usage() {
   cat <<'EOF'
@@ -22,6 +23,7 @@ Options:
   --demo                Enable MediaMTX and the synthetic RTSP camera
   --reuse-env           Reuse an existing deploy/compose/prod.env
   --no-build            Do not build local images before starting
+  --release <tag>       Pull published GHCR images instead of building locally
   -h, --help            Show this help
 EOF
 }
@@ -48,6 +50,10 @@ while [[ $# -gt 0 ]]; do
       BUILD_IMAGES=false
       shift
       ;;
+    --release)
+      RELEASE_TAG="${2:?missing value for --release}"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -69,6 +75,22 @@ docker compose version >/dev/null 2>&1 || {
   echo "Docker Compose is required" >&2
   exit 1
 }
+
+if [[ -n "${RELEASE_TAG}" ]]; then
+  if [[ ! "${RELEASE_TAG}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    echo "Invalid release tag: ${RELEASE_TAG}" >&2
+    exit 1
+  fi
+
+  export BACKEND_IMAGE="ghcr.io/dataolympus/rtsp-stream-console-backend:${RELEASE_TAG}"
+  export FRONTEND_IMAGE="ghcr.io/dataolympus/rtsp-stream-console-frontend:${RELEASE_TAG}"
+
+  BUILD_IMAGES=false
+
+  echo "Release:            ${RELEASE_TAG}"
+  echo "Backend image:      ${BACKEND_IMAGE}"
+  echo "Frontend image:     ${FRONTEND_IMAGE}"
+fi
 
 if [[ "${REUSE_ENV}" == false ]]; then
   if [[ -z "${SITE_ADDRESS}" ]]; then
@@ -141,7 +163,15 @@ fi
 
 docker compose "${COMPOSE_ARGS[@]}" config >/dev/null
 
-if [[ "${BUILD_IMAGES}" == true ]]; then
+if [[ -n "${RELEASE_TAG}" ]]; then
+  echo
+  echo "Pulling release images..."
+
+  docker compose "${COMPOSE_ARGS[@]}" pull backend frontend
+elif [[ "${BUILD_IMAGES}" == true ]]; then
+  echo
+  echo "Building application images..."
+
   COMPOSE_PARALLEL_LIMIT=1 \
     docker compose "${COMPOSE_ARGS[@]}" build
 fi
