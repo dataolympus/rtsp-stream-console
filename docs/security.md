@@ -555,7 +555,7 @@ The images are public so self-hosted users can pull releases without storing Git
 
 GitHub Actions publishes the images using repository-scoped workflow credentials.
 
-Production deployments should prefer explicit immutable release tags instead of a moving development tag.
+Production deployments should prefer explicit versioned release tags instead of a moving development tag.
 
 ## Deployment separation
 

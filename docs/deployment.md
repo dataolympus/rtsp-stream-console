@@ -461,12 +461,25 @@ The deployment command is:
   --site streams.example.com
 ```
 
-For example, after the first tagged release:
+For example, for v0.1.0:
 
 ```text
 --ref v0.1.0
 --release v0.1.0
 ```
+
+When `--release` is supplied, the deployment helper persists the exact backend and frontend GHCR image references in `deploy/compose/prod.env`.
+
+For example:
+
+```text
+BACKEND_IMAGE=ghcr.io/dataolympus/rtsp-stream-console-backend:v0.1.0
+FRONTEND_IMAGE=ghcr.io/dataolympus/rtsp-stream-console-frontend:v0.1.0
+```
+
+A later deployment using `--reuse-env` continues using those persisted image references even when `--release` is omitted.
+
+Supplying a new `--release` version updates the persisted references before deployment.
 
 The Git revision and container version should normally match.
 
@@ -478,7 +491,7 @@ The target-side helper can also build the application from source.
 
 This is primarily useful for development.
 
-Without `--release`, `deploy.sh` uses the local Docker build definitions.
+Without `--release` and without persisted release image references, `deploy.sh` uses the local Docker build definitions.
 
 Release mode is preferred for normal hosted deployments because it:
 
@@ -754,7 +767,7 @@ For the hosted demo:
   --demo
 ```
 
-The existing production environment is preserved.
+The existing production environment is preserved. Supplying `--release` while using `--reuse-env` also updates the persisted backend and frontend image references to the new version.
 
 ## Backend restart behavior
 

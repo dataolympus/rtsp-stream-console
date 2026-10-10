@@ -272,36 +272,38 @@ Terraform manages the host infrastructure. Application credentials are intention
 
 The Azure deployment wrapper discovers the VM through Terraform output and deploys an exact Git revision.
 
-For a development image:
+For a versioned release:
 
 ```bash
 ./scripts/deploy-azure.sh \
-  --ref <git-commit> \
-  --release dev \
+  --ref v0.1.0 \
+  --release v0.1.0 \
   --site streams.example.com
 ```
 
-Enable the synthetic camera with:
+Enable the synthetic camera for a demonstration deployment:
 
 ```bash
 ./scripts/deploy-azure.sh \
-  --ref <git-commit> \
-  --release dev \
+  --ref v0.1.0 \
+  --release v0.1.0 \
   --site streams.example.com \
   --demo
 ```
 
-For an existing deployment whose environment should be preserved:
+For an existing deployment whose environment and credentials should be preserved:
 
 ```bash
 ./scripts/deploy-azure.sh \
-  --ref <git-commit> \
-  --release dev \
+  --ref v0.1.0 \
+  --release v0.1.0 \
   --reuse-env \
   --demo
 ```
 
-Tagged release images will use the same workflow with a version such as `v0.1.0`.
+When a release is deployed, its backend and frontend image references are persisted in the production environment. A later `--reuse-env` deployment therefore continues using those exact images unless another `--release` version is supplied.
+
+For development builds, a commit SHA and the `dev` image tag can be used instead.
 
 ## Container images
 
@@ -320,13 +322,15 @@ Development deployments currently use:
 :dev
 ```
 
-Tagged releases will use immutable release versions such as:
+Versioned releases publish image tags such as:
 
 ```text
 :v0.1.0
+:0.1
+:sha-<commit>
 ```
 
-Production deployments should prefer an explicit release version instead of a moving development tag.
+Production deployments should use the exact version tag such as `:v0.1.0`. The `dev` tag is intended for development and testing.
 
 ## Production credentials
 
@@ -535,7 +539,7 @@ The current implementation has been exercised end to end with:
 - GitHub Actions-built GHCR images
 - automated Azure application deployment
 
-The first tagged release will follow after documentation, regression checks, and interface polish are complete.
+Versioned releases are verified by CI and published as Git tags and GHCR container images.
 
 ## License
 
