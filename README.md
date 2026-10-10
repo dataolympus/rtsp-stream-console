@@ -134,6 +134,24 @@ git clone https://github.com/dataolympus/rtsp-stream-console.git
 cd rtsp-stream-console
 ```
 
+> **Verify the source checkout**
+>
+> If you are developing or reviewing the source, run the project checks before starting the application:
+>
+> ```bash
+> ./scripts/check.sh
+> ```
+>
+> This verifies:
+>
+> - Go tests
+> - Go vet
+> - frontend tests
+> - frontend production build
+> - local Docker Compose configuration
+>
+> A normal release deployment using published GHCR images does not require running the source test suite locally.
+
 Start the local stack with the demo profile:
 
 ```bash
