@@ -11,6 +11,9 @@ ENABLE_DEMO=false
 REUSE_ENV=false
 BUILD_IMAGES=true
 RELEASE_TAG=""
+USE_RELEASE_IMAGES=false
+BACKEND_IMAGE=""
+FRONTEND_IMAGE=""
 
 usage() {
   cat <<'EOF'
@@ -26,6 +29,39 @@ Options:
   --release <tag>       Pull published GHCR images instead of building locally
   -h, --help            Show this help
 EOF
+}
+
+read_prod_env_value() {
+  local key="$1"
+
+  awk -F= -v key="${key}" '
+    $1 == key {
+      sub(/^[^=]*=/, "")
+      print
+      exit
+    }
+  ' "${PROD_ENV}"
+}
+
+set_prod_env_value() {
+  local key="$1"
+  local value="$2"
+  local tmp
+
+  tmp="$(mktemp "${PROD_ENV}.tmp.XXXXXX")"
+
+  awk -v key="${key}" '
+    index($0, key "=") != 1 {
+      print
+    }
+  ' "${PROD_ENV}" > "${tmp}"
+
+  printf '%s=%s\n' \
+    "${key}" \
+    "${value}" >> "${tmp}"
+
+  chmod 600 "${tmp}"
+  mv "${tmp}" "${PROD_ENV}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -82,10 +118,14 @@ if [[ -n "${RELEASE_TAG}" ]]; then
     exit 1
   fi
 
-  export BACKEND_IMAGE="ghcr.io/dataolympus/rtsp-stream-console-backend:${RELEASE_TAG}"
-  export FRONTEND_IMAGE="ghcr.io/dataolympus/rtsp-stream-console-frontend:${RELEASE_TAG}"
+  BACKEND_IMAGE="ghcr.io/dataolympus/rtsp-stream-console-backend:${RELEASE_TAG}"
+  FRONTEND_IMAGE="ghcr.io/dataolympus/rtsp-stream-console-frontend:${RELEASE_TAG}"
+
+  export BACKEND_IMAGE
+  export FRONTEND_IMAGE
 
   BUILD_IMAGES=false
+  USE_RELEASE_IMAGES=true
 
   echo "Release:            ${RELEASE_TAG}"
   echo "Backend image:      ${BACKEND_IMAGE}"
@@ -130,15 +170,23 @@ if [[ "${REUSE_ENV}" == false ]]; then
     printf 'SITE_ADDRESS=%s\n\n' "${SITE_ADDRESS}"
     printf 'DEMO_USERNAME=%s\n' "${USERNAME}"
     printf "DEMO_PASSWORD_HASH='%s'\n\n" "${PASSWORD_HASH}"
+
     printf 'RTSP_ALLOW_PRIVATE_NETWORKS=false\n'
     printf 'RTSP_ALLOWED_HOSTS=mediamtx\n\n'
+
     printf 'MAX_ACTIVE_STREAMS=2\n'
     printf 'MAX_VIEWERS_PER_STREAM=4\n'
     printf 'EXPENSIVE_REQUESTS_PER_MINUTE=10\n'
     printf 'TRUST_PROXY_HEADERS=true\n\n'
+
     printf 'BACKEND_CPUS=2.0\n'
     printf 'BACKEND_MEMORY_LIMIT=1g\n'
     printf 'BACKEND_PIDS_LIMIT=128\n'
+
+    if [[ -n "${RELEASE_TAG}" ]]; then
+      printf '\nBACKEND_IMAGE=%s\n' "${BACKEND_IMAGE}"
+      printf 'FRONTEND_IMAGE=%s\n' "${FRONTEND_IMAGE}"
+    fi
   } > "${PROD_ENV}"
 
   unset PASSWORD_HASH
@@ -148,6 +196,41 @@ else
   if [[ ! -f "${PROD_ENV}" ]]; then
     echo "${PROD_ENV} does not exist" >&2
     exit 1
+  fi
+
+  if [[ -n "${RELEASE_TAG}" && "${REUSE_ENV}" == true ]]; then
+    set_prod_env_value \
+      BACKEND_IMAGE \
+      "${BACKEND_IMAGE}"
+
+    set_prod_env_value \
+      FRONTEND_IMAGE \
+      "${FRONTEND_IMAGE}"
+  fi
+
+  if [[ -z "${RELEASE_TAG}" ]]; then
+    PERSISTED_BACKEND_IMAGE="$(
+      read_prod_env_value BACKEND_IMAGE || true
+    )"
+
+    PERSISTED_FRONTEND_IMAGE="$(
+      read_prod_env_value FRONTEND_IMAGE || true
+    )"
+
+    if [[ -n "${PERSISTED_BACKEND_IMAGE}" &&
+          -n "${PERSISTED_FRONTEND_IMAGE}" ]]; then
+      USE_RELEASE_IMAGES=true
+      BUILD_IMAGES=false
+
+      echo "Using persisted release images:"
+      echo "Backend image:      ${PERSISTED_BACKEND_IMAGE}"
+      echo "Frontend image:     ${PERSISTED_FRONTEND_IMAGE}"
+    elif [[ -n "${PERSISTED_BACKEND_IMAGE}" ||
+            -n "${PERSISTED_FRONTEND_IMAGE}" ]]; then
+      echo "Production environment contains incomplete image configuration." >&2
+      echo "Both BACKEND_IMAGE and FRONTEND_IMAGE must be configured." >&2
+      exit 1
+    fi
   fi
 fi
 
@@ -163,7 +246,7 @@ fi
 
 docker compose "${COMPOSE_ARGS[@]}" config >/dev/null
 
-if [[ -n "${RELEASE_TAG}" ]]; then
+if [[ "${USE_RELEASE_IMAGES}" == true ]]; then
   echo
   echo "Pulling release images..."
 
