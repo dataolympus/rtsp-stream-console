@@ -94,7 +94,6 @@ function StreamPlayer({
             <video
                 ref={videoRef}
                 aria-label={`${streamName} player`}
-                controls
                 muted
                 playsInline
                 style={{

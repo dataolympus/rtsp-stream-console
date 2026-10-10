@@ -195,4 +195,20 @@ describe('StreamPlayer', () => {
         expect(load).toHaveBeenCalledTimes(2);
         expect(play).toHaveBeenCalledTimes(2);
     });
+
+    it('uses application controls instead of native video controls', () => {
+        render(
+            <StreamPlayer
+                streamId="stream-1"
+                streamName="Camera 1"
+                isLive
+            />,
+        );
+
+        const video = screen.getByLabelText(
+            /camera 1 player/i,
+        ) as HTMLVideoElement;
+
+        expect(video.controls).toBe(false);
+    });
 });
