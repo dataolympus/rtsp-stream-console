@@ -87,11 +87,15 @@ func main() {
 
 	server := &http.Server{
 		Addr: cfg.HTTPAddr,
-		Handler: api.NewRouter(
+		Handler: api.NewRouterWithRateLimit(
 			healthHandler,
 			streamHandler,
 			websocketHandler,
 			runtimeHandler,
+			api.RateLimitConfig{
+				ExpensiveRequestsPerMinute: cfg.ExpensiveRequestsPerMinute,
+				TrustProxyHeaders:          cfg.TrustProxyHeaders,
+			},
 		),
 		ReadHeaderTimeout: cfg.HTTPReadHeaderTimeout,
 		IdleTimeout:       cfg.HTTPIdleTimeout,

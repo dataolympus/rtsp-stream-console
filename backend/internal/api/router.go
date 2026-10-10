@@ -2,10 +2,16 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/health"
 	"github.com/dataolympus/rtsp-stream-console/backend/internal/stream"
 )
+
+type RateLimitConfig struct {
+	ExpensiveRequestsPerMinute int
+	TrustProxyHeaders          bool
+}
 
 func NewRouter(
 	healthHandler *health.Handler,
@@ -13,7 +19,41 @@ func NewRouter(
 	websocketHandler *stream.WebSocketHandler,
 	runtimeHandler *stream.RuntimeHandler,
 ) http.Handler {
+	return NewRouterWithRateLimit(
+		healthHandler,
+		streamHandler,
+		websocketHandler,
+		runtimeHandler,
+		RateLimitConfig{},
+	)
+}
+
+func NewRouterWithRateLimit(
+	healthHandler *health.Handler,
+	streamHandler *stream.Handler,
+	websocketHandler *stream.WebSocketHandler,
+	runtimeHandler *stream.RuntimeHandler,
+	rateLimitConfig RateLimitConfig,
+) http.Handler {
 	mux := http.NewServeMux()
+
+	expensiveLimiter :=
+		newFixedWindowLimiter(
+			rateLimitConfig.
+				ExpensiveRequestsPerMinute,
+			time.Minute,
+		)
+
+	expensive := func(
+		handler http.HandlerFunc,
+	) http.Handler {
+		return rateLimit(
+			expensiveLimiter,
+			rateLimitConfig.
+				TrustProxyHeaders,
+			handler,
+		)
+	}
 
 	mux.HandleFunc(
 		"GET /healthz",
@@ -25,9 +65,11 @@ func NewRouter(
 		healthHandler.Readyz,
 	)
 
-	mux.HandleFunc(
+	mux.Handle(
 		"POST /api/v1/streams",
-		streamHandler.Create,
+		expensive(
+			streamHandler.Create,
+		),
 	)
 
 	mux.HandleFunc(
@@ -45,9 +87,11 @@ func NewRouter(
 		streamHandler.Delete,
 	)
 
-	mux.HandleFunc(
+	mux.Handle(
 		"POST /api/v1/streams/{id}/start",
-		runtimeHandler.Start,
+		expensive(
+			runtimeHandler.Start,
+		),
 	)
 
 	mux.HandleFunc(

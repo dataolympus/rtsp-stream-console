@@ -429,3 +429,153 @@ func TestRouterRoutesStreamStop(t *testing.T) {
 		)
 	}
 }
+
+func TestRouterSharesRateLimitAcrossExpensiveOperations(
+	t *testing.T,
+) {
+	controller := &fakeRuntimeController{}
+
+	runtimeHandler :=
+		stream.NewRuntimeHandler(
+			controller,
+		)
+
+	healthHandler := health.New(
+		func() bool { return true },
+	)
+
+	registry := stream.NewMemoryRegistry()
+	service := stream.NewService(registry)
+	streamHandler := stream.NewHandler(service)
+
+	hub := stream.NewHub()
+	websocketHandler :=
+		stream.NewWebSocketHandler(hub)
+
+	router := NewRouterWithRateLimit(
+		healthHandler,
+		streamHandler,
+		websocketHandler,
+		runtimeHandler,
+		RateLimitConfig{
+			ExpensiveRequestsPerMinute: 2,
+			TrustProxyHeaders:          false,
+		},
+	)
+
+	const remoteAddr = "203.0.113.20:50000"
+
+	createRequest := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/streams",
+		strings.NewReader(`{
+			"name": "Camera 1",
+			"url": "rtsp://camera.example.com/live"
+		}`),
+	)
+	createRequest.RemoteAddr = remoteAddr
+
+	createResponse :=
+		httptest.NewRecorder()
+
+	router.ServeHTTP(
+		createResponse,
+		createRequest,
+	)
+
+	if createResponse.Code !=
+		http.StatusCreated {
+		t.Fatalf(
+			"expected create status %d, got %d",
+			http.StatusCreated,
+			createResponse.Code,
+		)
+	}
+
+	// GET must not consume expensive-operation quota.
+	listRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/streams",
+		nil,
+	)
+	listRequest.RemoteAddr = remoteAddr
+
+	listResponse :=
+		httptest.NewRecorder()
+
+	router.ServeHTTP(
+		listResponse,
+		listRequest,
+	)
+
+	if listResponse.Code !=
+		http.StatusOK {
+		t.Fatalf(
+			"expected list status %d, got %d",
+			http.StatusOK,
+			listResponse.Code,
+		)
+	}
+
+	startRequest := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/streams/stream-1/start",
+		nil,
+	)
+	startRequest.RemoteAddr = remoteAddr
+
+	startResponse :=
+		httptest.NewRecorder()
+
+	router.ServeHTTP(
+		startResponse,
+		startRequest,
+	)
+
+	if startResponse.Code !=
+		http.StatusAccepted {
+		t.Fatalf(
+			"expected start status %d, got %d",
+			http.StatusAccepted,
+			startResponse.Code,
+		)
+	}
+
+	// Create + Start have now consumed the shared quota.
+	secondCreateRequest :=
+		httptest.NewRequest(
+			http.MethodPost,
+			"/api/v1/streams",
+			strings.NewReader(`{
+				"name": "Camera 2",
+				"url": "rtsp://camera.example.com/two"
+			}`),
+		)
+
+	secondCreateRequest.RemoteAddr =
+		remoteAddr
+
+	secondCreateResponse :=
+		httptest.NewRecorder()
+
+	router.ServeHTTP(
+		secondCreateResponse,
+		secondCreateRequest,
+	)
+
+	if secondCreateResponse.Code !=
+		http.StatusTooManyRequests {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusTooManyRequests,
+			secondCreateResponse.Code,
+		)
+	}
+
+	if secondCreateResponse.Header().
+		Get("Retry-After") == "" {
+		t.Fatal(
+			"expected Retry-After header",
+		)
+	}
+}

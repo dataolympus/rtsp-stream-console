@@ -201,3 +201,61 @@ func TestLoadUsesDefaultHTTPServerTimeouts(
 		)
 	}
 }
+
+func TestLoadUsesDefaultRateLimitConfiguration(
+	t *testing.T,
+) {
+	t.Setenv(
+		"EXPENSIVE_REQUESTS_PER_MINUTE",
+		"",
+	)
+
+	t.Setenv(
+		"TRUST_PROXY_HEADERS",
+		"",
+	)
+
+	cfg := Load()
+
+	if cfg.ExpensiveRequestsPerMinute != 10 {
+		t.Fatalf(
+			"expected default expensive requests per minute 10, got %d",
+			cfg.ExpensiveRequestsPerMinute,
+		)
+	}
+
+	if cfg.TrustProxyHeaders {
+		t.Fatal(
+			"expected proxy headers not to be trusted by default",
+		)
+	}
+}
+
+func TestLoadReadsRateLimitConfiguration(
+	t *testing.T,
+) {
+	t.Setenv(
+		"EXPENSIVE_REQUESTS_PER_MINUTE",
+		"6",
+	)
+
+	t.Setenv(
+		"TRUST_PROXY_HEADERS",
+		"true",
+	)
+
+	cfg := Load()
+
+	if cfg.ExpensiveRequestsPerMinute != 6 {
+		t.Fatalf(
+			"expected expensive requests per minute 6, got %d",
+			cfg.ExpensiveRequestsPerMinute,
+		)
+	}
+
+	if !cfg.TrustProxyHeaders {
+		t.Fatal(
+			"expected proxy headers to be trusted",
+		)
+	}
+}

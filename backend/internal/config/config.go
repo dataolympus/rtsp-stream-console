@@ -8,14 +8,16 @@ import (
 )
 
 type Config struct {
-	HTTPAddr                 string
-	HTTPReadHeaderTimeout    time.Duration
-	HTTPIdleTimeout          time.Duration
-	ShutdownTimeout          time.Duration
-	RTSPAllowPrivateNetworks bool
-	RTSPAllowedHosts         []string
-	MaxActiveStreams         int
-	MaxViewersPerStream      int
+	HTTPAddr                   string
+	HTTPReadHeaderTimeout      time.Duration
+	HTTPIdleTimeout            time.Duration
+	ShutdownTimeout            time.Duration
+	RTSPAllowPrivateNetworks   bool
+	RTSPAllowedHosts           []string
+	MaxActiveStreams           int
+	MaxViewersPerStream        int
+	ExpensiveRequestsPerMinute int
+	TrustProxyHeaders          bool
 }
 
 func Load() Config {
@@ -40,6 +42,15 @@ func Load() Config {
 		MaxViewersPerStream: getEnvPositiveInt(
 			"MAX_VIEWERS_PER_STREAM",
 			8,
+		),
+		ExpensiveRequestsPerMinute: getEnvPositiveInt(
+			"EXPENSIVE_REQUESTS_PER_MINUTE",
+			10,
+		),
+
+		TrustProxyHeaders: getEnvBool(
+			"TRUST_PROXY_HEADERS",
+			false,
 		),
 	}
 }
