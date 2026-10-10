@@ -54,25 +54,62 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve image tag
-        id: tag
+      - name: Resolve image tags
+        id: tags
         shell: bash
         run: |
+          set -euo pipefail
+
+          image="${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/${{ matrix.image }}"
+          sha_tag="${image}:sha-${GITHUB_SHA}"
+
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            echo "value=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            version="${{ inputs.image_tag }}"
+
+            if [[ ! "${version}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+              echo "Invalid container tag: ${version}" >&2
+              exit 1
+            fi
+
+            {
+              echo "version=${version}"
+              echo "values<<EOF"
+              echo "${image}:${version}"
+              echo "${sha_tag}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+
+            exit 0
           fi
+
+          version="${GITHUB_REF_NAME}"
+
+          if [[ ! "${version}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Release tags must use the form vMAJOR.MINOR.PATCH" >&2
+            echo "Received: ${version}" >&2
+            exit 1
+          fi
+
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          minor_tag="${major}.${minor}"
+
+          {
+            echo "version=${version}"
+            echo "values<<EOF"
+            echo "${image}:${version}"
+            echo "${image}:${minor_tag}"
+            echo "${sha_tag}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.tag.outputs.value }}
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}:sha-${{ github.sha }}
+          tags: ${{ steps.tags.outputs.values }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.tag.outputs.value }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
