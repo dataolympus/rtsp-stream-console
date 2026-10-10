@@ -1,5 +1,7 @@
 # RTSP Stream Console
 
+[![CI](https://github.com/dataolympus/rtsp-stream-console/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dataolympus/rtsp-stream-console/actions/workflows/ci.yml)
+
 A self-hostable web console for viewing and managing RTSP video streams in the browser.
 
 RTSP Stream Console accepts RTSP sources, processes them with FFmpeg, and delivers browser-compatible H.264 MPEG-TS video over WebSockets. Multiple viewers can share one active stream runtime instead of starting a separate FFmpeg process for every browser.

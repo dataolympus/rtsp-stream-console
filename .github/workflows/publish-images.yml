@@ -19,8 +19,13 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  verify:
+    name: Verify
+    uses: ./.github/workflows/ci.yml
+
   publish:
     name: Publish ${{ matrix.name }}
+    needs: verify
     runs-on: ubuntu-latest
 
     strategy:
