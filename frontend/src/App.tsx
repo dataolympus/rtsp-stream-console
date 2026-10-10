@@ -282,19 +282,25 @@ function App() {
 
   return (
     <Page>
-      <PageSection>
-        <Title headingLevel="h1">
-          RTSP Stream Console
-        </Title>
-      </PageSection>
+      <PageSection className="console-header">
+        <div className="console-header__content">
+          <div>
+            <Title headingLevel="h1">
+              RTSP Stream Console
+            </Title>
 
-      <PageSection>
-        <Button
-          variant="primary"
-          onClick={() => setIsAddOpen(true)}
-        >
-          Add stream
-        </Button>
+            <p className="console-header__description">
+              Monitor and control RTSP video streams.
+            </p>
+          </div>
+
+          <Button
+            variant="primary"
+            onClick={() => setIsAddOpen(true)}
+          >
+            Add stream
+          </Button>
+        </div>
       </PageSection>
 
       <PageSection>

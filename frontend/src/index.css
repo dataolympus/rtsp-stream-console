@@ -38,3 +38,27 @@
   align-items: center;
   gap: 0.5rem;
 }
+
+.console-header__content {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.console-header__description {
+  margin-block-start: 0.5rem;
+  margin-block-end: 0;
+  color: var(--pf-t--global--text--color--subtle, #4f575e);
+}
+
+.console-streams {
+  padding-block-start: 0;
+}
+
+@media (max-width: 767px) {
+  .console-header__content {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
