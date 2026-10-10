@@ -8,6 +8,14 @@ RTSP Stream Console accepts RTSP sources, processes them with FFmpeg, and delive
 
 Built with React, TypeScript, PatternFly, Go, FFmpeg, Docker Compose, Caddy, Terraform, and GitHub Container Registry.
 
+## Documentation
+
+- [Architecture](docs/architecture.md) - runtime ownership, media flow, lifecycle, and deployment boundaries
+- [Security](docs/security.md) - RTSP validation, authentication, resource controls, and known limitations
+- [Deployment](docs/deployment.md) - local Compose, Azure, GHCR, DNS, TLS, updates, and rollback
+- [Scaling](docs/scaling.md) - transcoding cost, viewer fan-out, worker evolution, WebRTC, and HLS
+- [Contributing](CONTRIBUTING.md) - development setup and contribution workflow
+
 ## Features
 
 - Register and manage multiple RTSP sources
@@ -524,3 +532,7 @@ The current implementation has been exercised end to end with:
 - automated Azure application deployment
 
 The first tagged release will follow after documentation, regression checks, and interface polish are complete.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
