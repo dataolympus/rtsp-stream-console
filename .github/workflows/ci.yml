@@ -11,6 +11,23 @@ permissions:
   contents: read
 
 jobs:
+  shell:
+    name: Shell
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate shell scripts
+        run: |
+          find scripts \
+            -maxdepth 1 \
+            -type f \
+            -name '*.sh' \
+            -print0 |
+          xargs -0 -r bash -n
+
   backend:
     name: Backend
     runs-on: ubuntu-latest
@@ -77,6 +94,20 @@ jobs:
             --env-file deploy/compose/demo.env \
             -f deploy/compose/compose.yaml \
             -f deploy/compose/compose.local.yaml \
+            --profile demo \
+            config >/dev/null
+
+      - name: Validate production Compose configuration
+        env:
+          SITE_ADDRESS: streams.example.com
+          DEMO_USERNAME: reviewer
+          DEMO_PASSWORD_HASH: placeholder
+          BACKEND_IMAGE: ghcr.io/dataolympus/rtsp-stream-console-backend:v0.1.0
+          FRONTEND_IMAGE: ghcr.io/dataolympus/rtsp-stream-console-frontend:v0.1.0
+        run: |
+          docker compose \
+            -f deploy/compose/compose.yaml \
+            -f deploy/compose/compose.prod.yaml \
             --profile demo \
             config >/dev/null
 
