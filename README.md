@@ -8,6 +8,10 @@ RTSP Stream Console accepts RTSP sources, processes them with FFmpeg, and delive
 
 Built with React, TypeScript, PatternFly, Go, FFmpeg, Docker Compose, Caddy, Terraform, and GitHub Container Registry.
 
+## Preview
+
+![RTSP Stream Console desktop view](docs/images/rtsp-stream-console-desktop.png)
+
 ## Documentation
 
 - [Architecture](docs/architecture.md) - runtime ownership, media flow, lifecycle, and deployment boundaries
