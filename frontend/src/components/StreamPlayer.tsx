@@ -90,7 +90,7 @@ function StreamPlayer({
     ]);
 
     return (
-        <div className="stream-player">
+        <>
             <video
                 ref={videoRef}
                 aria-label={`${streamName} player`}
@@ -101,6 +101,7 @@ function StreamPlayer({
 
             {isLive && (
                 <Button
+                    className="stream-player__toggle"
                     variant="secondary"
                     aria-label={
                         isViewerPlaying
@@ -118,7 +119,7 @@ function StreamPlayer({
                         : 'Play'}
                 </Button>
             )}
-        </div>
+        </>
     );
 }
 
