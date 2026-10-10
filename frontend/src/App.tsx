@@ -51,6 +51,28 @@ type Stream = {
 
 const STREAM_RECONCILE_MS = 2000;
 
+const readAPIError = async (
+  response: Response,
+): Promise<string | null> => {
+  try {
+    const payload =
+      (await response.json()) as {
+        error?: unknown;
+      };
+
+    if (
+      typeof payload.error === 'string' &&
+      payload.error.trim() !== ''
+    ) {
+      return payload.error.trim();
+    }
+  } catch {
+    // Fall back to the generic action error.
+  }
+
+  return null;
+};
+
 function App() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [name, setName] = useState('');
@@ -246,9 +268,14 @@ function App() {
       );
 
       if (!response.ok) {
+        const reason =
+          await readAPIError(response);
+
         setStreamActionError(
           stream.id,
-          `Unable to start ${stream.name}. Please try again.`,
+          reason
+            ? `Unable to start ${stream.name}: ${reason}`
+            : `Unable to start ${stream.name}. Please try again.`,
         );
 
         return;

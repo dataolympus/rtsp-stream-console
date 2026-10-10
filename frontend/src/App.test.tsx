@@ -494,7 +494,10 @@ describe('App', () => {
             })
             .mockResolvedValueOnce({
                 ok: false,
-                status: 500,
+                status: 503,
+                json: async () => ({
+                    error: 'stream capacity reached',
+                }),
             });
 
         render(<App />);
@@ -511,7 +514,7 @@ describe('App', () => {
 
         expect(
             await screen.findByText(
-                'Unable to start Camera 1. Please try again.',
+                /unable to start camera 1: stream capacity reached/i,
             ),
         ).toBeInTheDocument();
 
